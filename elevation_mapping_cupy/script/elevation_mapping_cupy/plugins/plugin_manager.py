@@ -113,8 +113,9 @@ class PluginManager(object):
     This manages the plugins.
     """
 
-    def __init__(self, cell_n: int):
+    def __init__(self, cell_n: int, cvar_alpha: float = 0.9):
         self.cell_n = cell_n
+        self.cvar_alpha = cvar_alpha
 
     def init(self, plugin_params: List[PluginParams], extra_params: List[Dict]):
         self.plugin_params = plugin_params
@@ -126,6 +127,8 @@ class PluginManager(object):
                 if inspect.isclass(obj) and issubclass(obj, PluginBase) and name != "PluginBase":
                     # Add cell_n to params
                     extra_param["cell_n"] = self.cell_n
+                    if "cvar_alpha" not in extra_param:
+                        extra_param["cvar_alpha"] = self.cvar_alpha
                     self.plugins.append(obj(**extra_param))
         self.layers = cp.zeros((len(self.plugins), self.cell_n, self.cell_n), dtype=cp.float32)
         self.layer_names = self.get_layer_names()

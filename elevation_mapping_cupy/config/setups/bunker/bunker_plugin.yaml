@@ -1,0 +1,60 @@
+# Settings of the plugins. (The plugins should be stored in script/plugins)
+
+# min_filter fills in minimum value around the invalid cell.
+min_filter:                                   
+  enable: True                                # weather to load this plugin
+  fill_nan: False                             # Fill nans to invalid cells of elevation layer.
+  is_height_layer: True                       # If this is a height layer (such as elevation) or not (such as traversability)
+  layer_name: "min_filter"                    # The layer name.
+  extra_params:                               # This params are passed to the plugin class on initialization.
+    dilation_size: 1                          # The patch size to apply
+    iteration_n: 30                           # The number of iterations
+
+# Apply smoothing.
+smooth_filter:                                
+  enable: True
+  fill_nan: False
+  is_height_layer: True
+  layer_name: "smooth"
+  extra_params:
+    input_layer_name: "min_filter"
+
+# Apply inpainting using opencv
+inpainting:
+  enable: True
+  fill_nan: False
+  is_height_layer: True
+  layer_name: "inpaint"
+  extra_params:
+    method: "telea"                           # telea or ns
+
+# Max filter (optional, for processing upper bound)
+max_filter:                                   
+  enable: False                               # Disabled by default
+  fill_nan: False
+  is_height_layer: True
+  layer_name: "max_filter"
+  extra_params:
+    dilation_size: 5
+    iteration_n: 10
+
+# Semantic filter: Combine all semantic classes into one visualization layer
+semantic_filter:
+  enable: True                                # Enable to visualize all semantic classes
+  type: "semantic_filter"
+  fill_nan: False
+  is_height_layer: False
+  layer_name: "max_categories"                # Output layer name
+  extra_params:
+    classes: ['^sem_.*$']                       # Match all layers starting with 'sem_'
+
+cvar_layer:
+  enable: True
+  type: "cvar_layer"
+  fill_nan: False
+  is_height_layer: False
+  layer_name: "similarity_cvar"
+  extra_params:
+    cvar_alpha: 0.2 # Lower alpha means more risk-averse, Higher alpha means more risk-seeking.
+    mean_layer_name: "similarity"
+    variance_layer_name: "similarity_var"

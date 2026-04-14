@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<launch>
+    <!-- Debayer raw Bayer image to color image for RGB fusion -->
+    <node pkg="image_proc" type="image_proc" name="pylon_image_proc" ns="/pylon_camera_node"/>
+
+    <!-- Elevation mapping node for Bunker robot -->
+    <node pkg="elevation_mapping_cupy" type="elevation_mapping_node" name="elevation_mapping" output="screen">
+        <rosparam command="load" file="$(find elevation_mapping_cupy)/config/setups/rellis/rellis_parameters.yaml"/>
+        <rosparam command="load" file="$(find elevation_mapping_cupy)/config/setups/rellis/rellis_sensor.yaml"/>
+    </node>
+
+    <!-- 将 GridMap 的 similarity 层转换为 Costmap -->
+    <node pkg="elevation_mapping_cupy" type="generate_costmap.py" name="gridmap_to_costmap" output="screen">
+        <param name="costmap_frame" value="map"/>
+        <param name="map_size" value="600.0"/>
+        <param name="resolution" value="0.75"/>
+        <param name="similarity_layer" value="similarity_cvar"/>
+        <param name="unknown_threshold" value="0.01"/>
+        <param name="obstacle_threshold" value="0.3"/>
+    </node>
+
+    <!-- 为点云的强度通道赋予 Costmap 信息 -->
+    <node pkg="elevation_mapping_cupy" type="generate_terrainmap.py" name="terrain_map_generator" output="screen">
+        <param name="vehicle_height" value="1.5"/>
+        <param name="voxel_size" value="0.25"/>
+        <param name="time_slop" value="0.5"/>
+    </node>
+
+    <!-- start rviz2 with bunker.rviz -->
+    <node pkg="rviz" type="rviz" name="bunker_rviz" output="screen" args="-d $(find elevation_mapping_cupy)/rviz/rellis.rviz"/>
+</launch>

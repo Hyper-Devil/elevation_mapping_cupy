@@ -280,19 +280,60 @@ class SemanticMap:
             image_width:
         """
 
+        # print(f"\n[SemanticMap] update_layers_image called with {len(channels)} channels")
+        # print(f"  Channels: {channels}")
+        # print(f"  Image list length: {len(image)}")
+        # if len(image) > 0:
+        #     print(f"  First image shape: {image[0].shape}, dtype: {image[0].dtype}")
+        #     print(f"  Image value range: [{float(cp.min(image[0])):.3f}, {float(cp.max(image[0])):.3f}]")
+        
+        # # Check correspondence data
+        # valid_count = int(cp.sum(valid_correspondence))
+        # total_cells = valid_correspondence.shape[0]
+        # print(f"  Valid correspondences: {valid_count}/{total_cells} ({100*valid_count/total_cells:.2f}%)")
+        # print(f"  UV correspondence shape: {uv_correspondence.shape}")
+        # print(f"  Image size: {image_width} x {image_height}")
+        
         process_channels, fusion_methods = self.get_fusion(
             channels, self.param.image_channel_fusions, self.layer_specs_image
         )
+        # print(f"  Process channels: {process_channels}")
+        # print(f"  Fusion methods: {fusion_methods}")
+        
         self.new_map[self.delete_new_layers] = 0.0
         for j, (fusion, channel) in enumerate(zip(fusion_methods, process_channels)):
             if channel not in self.layer_names:
                 print(f"Layer {channel} not found, adding it to the semantic map")
                 self.add_layer(channel)
             sem_map_idx = self.get_index(channel)
+            sem_map_var_idx = None
+            sem_map_aux_idxs = None
+
+            if fusion == "exponential_variance":
+                var_channel = f"{channel}_var"
+                if var_channel not in self.layer_names:
+                    print(f"Layer {var_channel} not found, adding it to the semantic map")
+                    self.add_layer(var_channel)
+                sem_map_var_idx = self.get_index(var_channel)
+
+                count_channel = f"{channel}_count"
+                if count_channel not in self.layer_names:
+                    print(f"Layer {count_channel} not found, adding it to the semantic map")
+                    self.add_layer(count_channel)
+                sem_map_aux_idxs = [self.get_index(count_channel)]
 
             if sem_map_idx == -1:
                 print(f"Layer {channel} not found!")
                 return
+            
+            # print(f"  Processing channel {j}: '{channel}' (idx={sem_map_idx}) with fusion='{fusion}'")
+            # if j < len(image):
+            #     img_ch = image[j]
+            #     non_zero = int(cp.sum(img_ch > 0.5))
+            #     total_px = img_ch.shape[0] * img_ch.shape[1]
+            #     print(f"    Image channel {j}: shape={img_ch.shape}, "
+            #           f"range=[{float(cp.min(img_ch)):.3f}, {float(cp.max(img_ch)):.3f}], "
+            #           f"high_prob={non_zero}/{total_px} ({100*non_zero/total_px:.2f}%)")
 
             # update the layers with the fusion algorithm
             self.fusion_manager.execute_image_plugin(
@@ -306,7 +347,20 @@ class SemanticMap:
                 image_width,
                 self.semantic_map,
                 self.new_map,
+                sem_map_var_idx,
+                sem_map_aux_idxs,
             )
+            
+            # Check the result after fusion
+            # map_data = self.semantic_map[sem_map_idx]
+            # non_zero_map = int(cp.sum(map_data > 0.5))
+            # total_map = map_data.shape[0] * map_data.shape[1]
+            # print(f"    After fusion: semantic_map[{sem_map_idx}] "
+            #       f"range=[{float(cp.min(map_data)):.3f}, {float(cp.max(map_data)):.3f}], "
+            #       f"high_prob={non_zero_map}/{total_map} ({100*non_zero_map/total_map:.2f}%)")
+            pass
+        
+        # print(f"[SemanticMap] update_layers_image completed\n")
 
     def decode_max(self, mer):
         """Decode the float32 value into two 16 bit value containing the class probability and the class id.

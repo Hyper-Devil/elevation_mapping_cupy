@@ -110,7 +110,7 @@ class ElevationMap:
         self.untraversable_polygon = xp.zeros((1, 2))
 
         # Plugins
-        self.plugin_manager = PluginManager(cell_n=self.cell_n)
+        self.plugin_manager = PluginManager(cell_n=self.cell_n, cvar_alpha=self.param.cvar_alpha)
         plugin_config_file = subprocess.getoutput('echo "' + param.plugin_config_file + '"')
         self.plugin_manager.load_plugin_settings(plugin_config_file)
 

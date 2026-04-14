@@ -91,22 +91,53 @@ class FusionManager(object):
         image_width,
         semantic_map,
         new_map,
+        sem_map_var_idx=None,
+        sem_map_aux_idxs=None,
     ):
         """
         Execute a registered fusion plugin
         """
         idx = self.get_plugin_idx(name, "image")
         if idx is not None:
-            self.plugins[idx](
-                sem_map_idx,
-                image,
-                j,
-                uv_correspondence,
-                valid_correspondence,
-                image_height,
-                image_width,
-                semantic_map,
-                new_map,
-            )
+            try:
+                self.plugins[idx](
+                    sem_map_idx,
+                    image,
+                    j,
+                    uv_correspondence,
+                    valid_correspondence,
+                    image_height,
+                    image_width,
+                    semantic_map,
+                    new_map,
+                    sem_map_var_idx,
+                    sem_map_aux_idxs,
+                )
+            except TypeError:
+                try:
+                    self.plugins[idx](
+                        sem_map_idx,
+                        image,
+                        j,
+                        uv_correspondence,
+                        valid_correspondence,
+                        image_height,
+                        image_width,
+                        semantic_map,
+                        new_map,
+                        sem_map_var_idx,
+                    )
+                except TypeError:
+                    self.plugins[idx](
+                        sem_map_idx,
+                        image,
+                        j,
+                        uv_correspondence,
+                        valid_correspondence,
+                        image_height,
+                        image_width,
+                        semantic_map,
+                        new_map,
+                    )
         # else:
         #     raise ValueError("Plugin {} is not registered".format(name))

@@ -26,6 +26,10 @@ class SemanticFilter(PluginBase):
         self.indices = []
         self.classes = classes
         self.color_encoding = self.transform_color()
+        # Create color index mapping for semantic classes (map channel index to color index)
+        # Spread the indices across the color map for better visualization
+        self.max_classes = 255  # Total colors in colormap
+        self.class_color_map = None  # Will be initialized when we know how many classes we have
 
     def color_map(self, N: int = 256, normalized: bool = False):
         """
@@ -73,8 +77,9 @@ class SemanticFilter(PluginBase):
         g = np.asarray(color_classes[:, 1], dtype=np.uint32)
         b = np.asarray(color_classes[:, 2], dtype=np.uint32)
         rgb_arr = np.array((r << 16) | (g << 8) | (b << 0), dtype=np.uint32)
-        rgb_arr.dtype = np.float32
-        return cp.asarray(rgb_arr)
+        rgb_arr = rgb_arr.view(np.float32)
+        result = cp.asarray(rgb_arr)
+        return result
 
     def get_layer_indices(self, layer_names: List[str]) -> List[int]:
         """ Get the indices of the layers that are to be processed using regular expressions.
@@ -116,18 +121,33 @@ class SemanticFilter(PluginBase):
         """
         # get indices of all layers that contain semantic class information
         data = []
+        all_layer_indices = []
         for m, layer_names in zip(
             [elevation_map, plugin_layers, semantic_map], [layer_names, plugin_layer_names, semantic_layer_names]
         ):
             layer_indices = self.get_layer_indices(layer_names)
             if len(layer_indices) > 0:
-                data.append(m[layer_indices])
+                layer_data = m[layer_indices]
+                data.append(layer_data)
+                all_layer_indices.extend([layer_names[i] for i in layer_indices])
+        
         if len(data) > 0:
             data = cp.concatenate(data, axis=0)
+            # Initialize class color mapping if not already done
+            num_classes = data.shape[0]
+            if self.class_color_map is None or len(self.class_color_map) != num_classes:
+                # Create a mapping that spreads class indices across the color map
+                # This ensures different classes get visually distinct colors
+                step = self.max_classes // num_classes
+                self.class_color_map = cp.array([i * step for i in range(num_classes)], dtype=cp.int32)
+            
             class_map = cp.amax(data, axis=0)
             class_map_id = cp.argmax(data, axis=0)
+            
+            # Map class indices to color indices
+            color_indices = self.class_color_map[class_map_id]
         else:
-            class_map = cp.zeros_like(elevation_map[0])
-            class_map_id = cp.zeros_like(elevation_map[0], dtype=cp.int32)
-        enc = self.color_encoding[class_map_id]
+            color_indices = cp.zeros_like(elevation_map[0], dtype=cp.int32)
+        
+        enc = self.color_encoding[color_indices]
         return enc

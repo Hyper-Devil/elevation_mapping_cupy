@@ -167,11 +167,27 @@ class ElevationMapWrapper:
         R = quaternion_matrix([q.x, q.y, q.z, q.w])[:3, :3]
 
         semantic_img = self.cv_bridge.imgmsg_to_cv2(camera_msg, desired_encoding="passthrough")
+        
+        print(f"[ElevationMappingROS] Received semantic image from '{sub_key}'")
+        print(f"  Original shape: {semantic_img.shape}, dtype: {semantic_img.dtype}")
+        print(f"  Value range: [{np.min(semantic_img):.3f}, {np.max(semantic_img):.3f}]")
 
         if len(semantic_img.shape) != 2:
-            semantic_img = [semantic_img[:, :, k] for k in range(3)]
+            # Use the actual number of channels from the image
+            num_channels = semantic_img.shape[2]
+            print(f"  Multi-channel image with {num_channels} channels")
+            # Print statistics for each channel
+            for k in range(min(5, num_channels)):  # Print first 5 channels
+                ch_data = semantic_img[:, :, k]
+                non_zero = np.count_nonzero(ch_data > 0.5)
+                print(f"    Channel {k}: range=[{ch_data.min():.3f}, {ch_data.max():.3f}], "
+                      f"high_prob_pixels={non_zero} ({100*non_zero/(ch_data.shape[0]*ch_data.shape[1]):.2f}%)")
+            if num_channels > 5:
+                print(f"    ... and {num_channels - 5} more channels")
+            semantic_img = [semantic_img[:, :, k] for k in range(num_channels)]
 
         else:
+            print(f"  Single channel image")
             semantic_img = [semantic_img]
 
         K = np.array(camera_info_msg.K, dtype=np.float32).reshape(3, 3)

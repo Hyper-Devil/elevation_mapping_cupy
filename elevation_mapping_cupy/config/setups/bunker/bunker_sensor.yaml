@@ -1,0 +1,67 @@
+#### Plugins ########
+plugin_config_file: '$(rospack find elevation_mapping_cupy)/config/setups/bunker/bunker_plugin.yaml'
+
+#### Fusion algorithms ########
+pointcloud_channel_fusions:
+  default: 'average'              # Defaul# t fusion for unknown pointcloud channels
+  # rgb: 'color'
+  # none: 'none'
+
+image_channel_fusions:
+  rgb: 'color'
+  default: 'exponential'              # Default fusion for all semantic channels
+  similarity: 'exponential_variance'
+  similarity_.*: 'exponential_variance'
+
+#### Subscribers ########
+# Note: Please update these topic names according to your robot's actual topics
+subscribers:
+  # LiDAR pointcloud from FAST-LIO
+  lidar_points:
+    topic_name: '/accumulated_map_points'           # FAST-LIO /cloud_registered
+    data_type: pointcloud
+    # channels: ['rgb']                       # Uncomment if your pointcloud contains RGB data
+  
+  # RGB camera for color information (optional)
+  rgb_camera:
+    topic_name: '/hikrobot_camera_L/image_rect'
+    camera_info_topic_name: '/hikrobot_camera_L/image_rect/camera_info'
+    data_type: image
+    channels: ['rgb']                       # Enable RGB channel fusion from image
+  
+  # Similarity feature map (your single-channel feature)
+  similarity_feature:
+    topic_name: '/hikrobot_camera_L/similarity_traversability'
+    camera_info_topic_name: '/hikrobot_camera_L/image_rect/camera_info'
+    channel_info_topic_name: '/hikrobot_camera_L/similarity_traversability_info'
+    data_type: image
+  
+  # Semantic segmentation (multi-channel probability maps)
+  semantic_seg:
+    topic_name: '/hikrobot_camera_L/semantic_image'
+    camera_info_topic_name: '/hikrobot_camera_L/image_rect/camera_info'
+    channel_info_topic_name: '/hikrobot_camera_L/semantic_info'
+    data_type: image
+    channels: ['sem_6s5f2w', 'sem_road', 'sem_dirt', 'sem_grass', 'sem_bush', 'sem_water', 'sem_stone', 'sem_person', 'sem_fence', 'sem_tree', 'sem_building', 'sem_bicycle', 'sem_car', 'sem_train', 'sem_bus', 'sem_truck', 'sem_boat', 'sem_cat', 'sem_dog', 'sem_tent', 'sem_river', 'sem_sky']
+
+#### Publishers ########
+# topic_name:
+#   layers:               # Choose from 'elevation', 'variance', 'traversability', 'time', 'normal_x', 'normal_y', 'normal_z', 'rgb', 'upper_bound', plugin_layer_names
+#   basic_layers:         # basic_layers for valid cell computation (e.g. Rviz): Choose a subset of `layers`.
+#   fps:                  # Publish rate. Use smaller value than `map_acquire_fps`.
+
+publishers:
+  elevation_map_raw:
+    layers: ['elevation', 'traversability', 'variance', 'rgb', 'similarity', 'similarity_var', 'similarity_cvar', 'max_categories']
+    basic_layers: ['elevation']
+    fps: 5.0
+
+  # elevation_map_recordable:
+  #   layers: ['elevation', 'traversability', 'similarity', 'max_categories']
+  #   basic_layers: ['elevation', 'traversability']
+  #   fps: 2.0
+
+  filtered_elevation_map:
+    layers: ['inpaint', 'smooth', 'min_filter', 'elevation', 'traversability', 'similarity', 'similarity_var', 'similarity_cvar', 'max_categories']
+    basic_layers: ['inpaint']
+    fps: 3.0
