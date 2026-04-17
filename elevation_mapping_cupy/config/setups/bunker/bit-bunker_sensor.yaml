@@ -1,5 +1,5 @@
 #### Plugins ########
-plugin_config_file: '$(rospack find elevation_mapping_cupy)/config/setups/bunker/bunker_plugin.yaml'
+plugin_config_file: '$(rospack find elevation_mapping_cupy)/config/setups/bunker/bit-bunker_plugin.yaml'
 
 #### Fusion algorithms ########
 pointcloud_channel_fusions:
@@ -18,28 +18,28 @@ image_channel_fusions:
 subscribers:
   # LiDAR pointcloud from FAST-LIO
   lidar_points:
-    topic_name: '/accumulated_map_points'           # FAST-LIO /cloud_registered /accumulated_map_points
+    topic_name: '/accumulated_map_points'           # FAST-LIO /cloud_registered
     data_type: pointcloud
     # channels: ['rgb']                       # Uncomment if your pointcloud contains RGB data
   
   # RGB camera for color information (optional)
   rgb_camera:
-    topic_name: '/hikrobot_camera_L/image_rect'
-    camera_info_topic_name: '/hikrobot_camera_L/image_rect/camera_info'
+    topic_name: '/hikrobot_camera/camera_left/image_raw'
+    camera_info_topic_name: '/hikrobot_camera/camera_left/camera_info'
     data_type: image
     channels: ['rgb']                       # Enable RGB channel fusion from image
   
   # Similarity feature map (your single-channel feature)
   similarity_feature:
     topic_name: '/hikrobot_camera_L/similarity_traversability'
-    camera_info_topic_name: '/hikrobot_camera_L/image_rect/camera_info'
+    camera_info_topic_name: '/hikrobot_camera/camera_left/camera_info'
     channel_info_topic_name: '/hikrobot_camera_L/similarity_traversability_info'
     data_type: image
   
   # Semantic segmentation (multi-channel probability maps)
   semantic_seg:
     topic_name: '/hikrobot_camera_L/semantic_image'
-    camera_info_topic_name: '/hikrobot_camera_L/image_rect/camera_info'
+    camera_info_topic_name: '/hikrobot_camera/camera_left/camera_info'
     channel_info_topic_name: '/hikrobot_camera_L/semantic_info'
     data_type: image
     channels: ['sem_6s5f2w', 'sem_road', 'sem_dirt', 'sem_grass', 'sem_bush', 'sem_water', 'sem_stone', 'sem_person', 'sem_fence', 'sem_tree', 'sem_building', 'sem_bicycle', 'sem_car', 'sem_train', 'sem_bus', 'sem_truck', 'sem_boat', 'sem_cat', 'sem_dog', 'sem_tent', 'sem_river', 'sem_sky']

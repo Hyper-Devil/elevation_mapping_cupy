@@ -3,16 +3,46 @@
 """
 将 GridMap 的 similarity_cvar 层转换为 Costmap (OccupancyGrid)
 
-订阅: filtered_elevation_map (grid_map_msgs/GridMap)
-发布: similarity_costmap (nav_msgs/OccupancyGrid)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Topic
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  订阅: /elevation_mapping/filtered_elevation_map  (grid_map_msgs/GridMap)
+  发布: similarity_costmap                         (nav_msgs/OccupancyGrid)
 
-值映射规则:
-- similarity < 0.01 或 NaN: 不更新（保持原值）
-- similarity < 0.3: 100 (障碍)
-- similarity 0.3~0.5: 70
-- similarity 0.5~0.7: 50
-- similarity 0.7~0.9: 30
-- similarity >= 0.9: 0 (自由)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Costmap 地图设置
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  - 尺寸: map_size × map_size（默认 50m × 50m），固定静态地图
+  - 分辨率: 默认 0.5m/格，可通过 ROS 参数 ~resolution 配置
+  - 原点: (-map_size/2, -map_size/2)，机器人初始位于地图中心
+  - 初始值: -1（未知），已观测区域只增不减，不因机器人离开而清除
+    （数据融合由 GridMap 自身维护，本节点仅做格式转换）
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GridMap 数据布局（grid_map_msgs/Float32MultiArray）
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  - 数据以 Eigen 列优先存储，reshape 后形状为 (dim[0].size, dim[1].size)
+  - dim[0]: label="column"，对应 y 方向，大小 = y_cells
+  - dim[1]: label="row"，   对应 x 方向，大小 = x_cells
+  - 索引 [i, j] = y方向第 i 格、x方向第 j 格
+
+  坐标转换公式（实测验证方向正确）:
+    world_y = pos_y + (y_cells/2 - i - 0.5) * resolution
+    world_x = pos_x + (x_cells/2 - j - 0.5) * resolution
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+similarity → cost 映射规则（分档阈值）
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  NaN 或 < unknown_threshold(0.01) : -1  不更新，保持原值
+  [unknown_threshold, 0.3)          :  40
+  [0.3, 0.5)                        :  20
+  [0.5, free_threshold(0.9))        :  10
+  >= free_threshold(0.9)            :   0 自由
+
+  阈值均可通过 ROS 参数配置:
+    ~unknown_threshold  (默认 0.01)
+    ~obstacle_threshold (默认 0.3)
+    ~free_threshold     (默认 0.9)
 """
 
 import rospy
@@ -29,7 +59,7 @@ class GridMapToCostmap:
         self.costmap_frame = rospy.get_param('~costmap_frame', 'map')
         self.map_size = rospy.get_param('~map_size', 50.0)  # 米
         self.resolution = rospy.get_param('~resolution', 0.5)  # 米/格
-        self.similarity_layer = rospy.get_param('~similarity_layer', 'similarity')
+        self.similarity_layer = rospy.get_param('~similarity_layer', 'similarity_cvar')
         
         # 阈值参数
         self.unknown_threshold = rospy.get_param('~unknown_threshold', 0.01)
@@ -69,8 +99,6 @@ class GridMapToCostmap:
             
             # 获取 GridMap 参数
             gm_resolution = msg.info.resolution
-            gm_length_x = msg.info.length_x
-            gm_length_y = msg.info.length_y
             gm_pos_x = msg.info.pose.position.x
             gm_pos_y = msg.info.pose.position.y
             
@@ -82,26 +110,35 @@ class GridMapToCostmap:
             similarity_data = np.array(msg.data[layer_index].data, dtype=np.float32)
             similarity_data = similarity_data.reshape((gm_cols, gm_rows))
 
-            # 遍历 GridMap 的每个格子
-            for gm_i in range(gm_cols):
-                for gm_j in range(gm_rows):
-                    # GridMap 索引转世界坐标
-                    # GridMap 中心在 (gm_pos_x, gm_pos_y)
-                    # gm_i 对应 y 方向，gm_j 对应 x 方向
-                    world_x = gm_pos_x + (gm_rows / 2.0 - gm_j - 0.5) * gm_resolution
-                    world_y = gm_pos_y + (gm_cols / 2.0 - gm_i - 0.5) * gm_resolution
+            # 向量化计算：GridMap 索引 → 世界坐标 → Costmap 索引
+            # dim[0](gm_cols) 对应 y 方向，dim[1](gm_rows) 对应 x 方向
+            i_idx = np.arange(gm_cols)  # y方向索引
+            j_idx = np.arange(gm_rows)  # x方向索引
 
-                    # 世界坐标转 Costmap 索引
-                    cm_i = int((world_x - self.origin_x) / self.resolution)
-                    cm_j = int((world_y - self.origin_y) / self.resolution)
+            world_y = gm_pos_y + (gm_cols / 2.0 - i_idx - 0.5) * gm_resolution  # (gm_cols,)
+            world_x = gm_pos_x + (gm_rows / 2.0 - j_idx - 0.5) * gm_resolution  # (gm_rows,)
 
-                    # 检查是否在 Costmap 范围内
-                    if 0 <= cm_i < self.map_width and 0 <= cm_j < self.map_height:
-                        similarity = similarity_data[gm_i, gm_j]
-                        cost = self.similarity_to_cost(similarity)
-                        # 只有当 cost 不为 None 时才更新
-                        if cost is not None:
-                            self.costmap_data[cm_j, cm_i] = cost
+            cm_rows = np.floor((world_y - self.origin_y) / self.resolution).astype(int)  # (gm_cols,)
+            cm_cols = np.floor((world_x - self.origin_x) / self.resolution).astype(int)  # (gm_rows,)
+
+            # 过滤超出 Costmap 范围的索引
+            valid_row = (cm_rows >= 0) & (cm_rows < self.map_height)
+            valid_col = (cm_cols >= 0) & (cm_cols < self.map_width)
+
+            gi_valid = np.where(valid_row)[0]
+            gj_valid = np.where(valid_col)[0]
+
+            if gi_valid.size == 0 or gj_valid.size == 0:
+                return
+
+            # 提取有效子区域并批量计算 cost
+            sub_sim = similarity_data[np.ix_(gi_valid, gj_valid)]      # (ny, nx)
+            cost_grid = self.similarity_to_cost_vectorized(sub_sim)     # (ny, nx)，-1=不更新
+
+            # 构建 costmap 行列索引网格并批量写入
+            CM_ROWS, CM_COLS = np.meshgrid(cm_rows[gi_valid], cm_cols[gj_valid], indexing='ij')
+            update_mask = cost_grid >= 0
+            self.costmap_data[CM_ROWS[update_mask], CM_COLS[update_mask]] = cost_grid[update_mask]
 
             # 发布 Costmap
             self.publish_costmap(msg.info.header.stamp)
@@ -109,41 +146,30 @@ class GridMapToCostmap:
         except Exception as e:
             rospy.logerr(f"Error processing GridMap: {e}")
 
-    def similarity_to_cost(self, similarity):
+    def similarity_to_cost_vectorized(self, similarity):
         """
-        将 similarity 值转换为 costmap 代价值
-        
+        向量化版本：将 similarity 数组批量转换为 costmap 代价值
+
         参数:
-            similarity: 0~1 的相似度值
-            
+            similarity: np.ndarray，值域 0~1
         返回:
-            cost: None(不更新), 0~100(自由~障碍)
+            cost: np.ndarray (int8)，-1=不更新，0~100(自由~障碍)
         """
-        # 检查 NaN 或接近 0 的值 -> 不更新
-        if np.isnan(similarity) or similarity < self.unknown_threshold:
-            return None
-        
-        # 低于 obstacle_threshold -> 障碍
-        if similarity < self.obstacle_threshold:
-            return 100
+        cost = np.full(similarity.shape, -1, dtype=np.int8)
 
-        # 0.3~0.5 -> 70
-        if similarity < 0.5:
-            return 70
+        # NaN 或低于 unknown_threshold -> 不更新
+        known = ~np.isnan(similarity) & (similarity >= self.unknown_threshold)
+        s = similarity[known]
 
-        # 0.5~0.7 -> 50
-        if similarity < 0.7:
-            return 50
+        c = np.empty(s.shape, dtype=np.int8)
+        c[s < self.obstacle_threshold] = 100
+        c[(s >= self.obstacle_threshold) & (s < 0.3)] = 40
+        c[(s >= 0.3) & (s < 0.5)] = 20
+        c[(s >= 0.5) & (s < self.free_threshold)] = 10
+        c[s >= self.free_threshold] = 0
 
-        # 0.7~0.9 -> 30
-        if similarity < self.free_threshold:
-            return 30
-
-        # 高于 free_threshold -> 自由
-        if similarity >= self.free_threshold:
-            return 0
-
-        return 0
+        cost[known] = c
+        return cost
 
     def publish_costmap(self, stamp):
         """发布 OccupancyGrid 消息"""

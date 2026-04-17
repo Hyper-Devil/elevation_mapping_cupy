@@ -147,3 +147,52 @@ roslaunch turtlebot3_teleop turtlebot3_teleop_key.launch
 ```
 
 Velocity inputs can be sent to the robot by pressing the keys `a`, `w`, `d`, `x`. To stop the robot completely, press `s`.
+
+---
+
+## 本地定制修改记录（Bunker 语义分割接入）
+
+### 单通道 index 图自动展开为 one-hot（`elevation_mapping_ros.cpp`）
+
+**背景**：上游语义分割节点（san_app）发布 H×W uint8 的类别索引图（3MB），而不是 H×W×N float32 的 one-hot 概率图（264MB），以减少消息大小和发布延迟。
+
+**修改位置**：`src/elevation_mapping_ros.cpp`，`inputImage()` 函数中，`cv::split` 之后、通道数校验之前。python文件修改无效。
+
+**逻辑**：
+- 若图像为单通道 **整数类型**（`CV_8U/CV_8S/CV_16U/CV_16S/CV_32S`）且配置了多个语义通道：
+  - 将像素值视为类别索引，展开为 N 个二值通道（属于该类=1，否则=0）
+- 若图像为单通道 **浮点类型**（`CV_32F` 等）：不做展开，作为单通道概率图直接传入
+- 若图像为多通道：走原有路径，不受影响
+
+这样做到了对下游代码零侵入：多通道 float32 图像的原有行为完全不变。
+
+**重新编译**：
+```bash
+source /opt/ros/noetic/setup.bash
+catkin_make --pkg elevation_mapping_cupy
+```
+
+### rviz 可视化语义层（重要）
+
+`semantic_filter` 插件输出的 `max_categories` 层存储的是 **RGB 打包成 float32 的颜色值**，不是强度值。
+
+在 rviz 的 GridMap 显示中必须设置：
+- `Color Layer`: `max_categories`
+- `Color Transformer`: **`ColorLayer`**（不能用 `IntensityLayer`，否则显示为灰度梯度）
+
+### Bunker 传感器配置
+
+语义分割接入配置文件：`config/setups/bunker/bunker_sensor.yaml`
+
+关键字段：
+```yaml
+semantic_seg:
+  topic_name: '/hikrobot_camera_L/semantic_image'   # 接收单通道 uint8 index 图
+  channel_info_topic_name: '/hikrobot_camera_L/semantic_info'  # 动态获取通道名列表
+  data_type: image
+  channels: ['sem_6s5f2w', 'sem_road', ...]         # 22 个语义类别
+```
+
+`max_categories` 已加入两个发布话题的 `layers` 列表：
+- `/elevation_mapping/elevation_map_raw`（5Hz）
+- `/elevation_mapping/filtered_elevation_map`（3Hz）

@@ -187,8 +187,18 @@ class ElevationMapWrapper:
             semantic_img = [semantic_img[:, :, k] for k in range(num_channels)]
 
         else:
-            print(f"  Single channel image")
-            semantic_img = [semantic_img]
+            # 单通道图：根据 dtype 判断是 index 图还是浮点概率图
+            # - uint8/整数型 + 配置多通道 → 类别索引图，展开为 one-hot
+            # - float 型 或 配置单通道 → 直接作为单通道传入
+            n_cls = len(self.param.subscriber_cfg[sub_key]["channels"])
+            if n_cls > 1 and np.issubdtype(semantic_img.dtype, np.integer):
+                h, w = semantic_img.shape
+                idx = semantic_img.clip(0, n_cls - 1)
+                one_hot = np.zeros((h, w, n_cls), dtype=np.uint8)
+                one_hot[np.arange(h)[:, None], np.arange(w)[None, :], idx] = 1
+                semantic_img = [one_hot[:, :, k] for k in range(n_cls)]
+            else:
+                semantic_img = [semantic_img]
 
         K = np.array(camera_info_msg.K, dtype=np.float32).reshape(3, 3)
 

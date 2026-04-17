@@ -55,7 +55,6 @@ cvar_layer:
   is_height_layer: False
   layer_name: "similarity_cvar"
   extra_params:
-    # cvar_alpha 调参指导：值越大越保守（α=0.99 对应惩罚最差1%情况），值越小越激进（α→0 退化为纯均值）
-    cvar_alpha: 0.1
+    cvar_alpha: 0.2 # Lower alpha means more risk-averse, Higher alpha means more risk-seeking.
     mean_layer_name: "similarity"
     variance_layer_name: "similarity_var"
