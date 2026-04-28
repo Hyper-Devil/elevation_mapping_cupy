@@ -5,18 +5,25 @@
 ```
 elevation_mapping_cupy/
 ├── launch/
-│   └── bunker.launch                    # 主启动文件
+│   ├── bunker.launch                    # 通用启动文件
+│   └── bit-bunker.launch                # BIT-Bunker 启动文件（含 Costmap 节点）
+├── script/
+│   ├── generate_costmap.py              # similarity_cvar → /similarity_costmap（全局地图）
+│   ├── generate_elevation_costmap.py    # inpaint elevation → /elevation_costmap（坡度局部地图）
+│   └── generate_livox_costmap.py        # /livox/points → /livox_costmap（点云局部地图，可替代上者）
 └── config/setups/bunker/
-    ├── bunker_parameters.yaml           # 核心参数配置
+    ├── bunker_parameters.yaml           # 核心参数配置（分辨率 0.1m，地图 15×15m）
     ├── bunker_sensor.yaml               # 传感器和发布器配置
-    └── bunker_plugin.yaml               # 插件配置
+    ├── bit-bunker_sensor.yaml           # BIT-Bunker 传感器配置
+    ├── bunker_plugin.yaml               # 插件配置
+    └── bit-bunker_plugin.yaml           # BIT-Bunker 插件配置
 ```
 
 ## 🚀 使用方法
 
-### 1. 启动elevation mapping
+### 1. 启动elevation mapping（BIT-Bunker）
 ```bash
-roslaunch elevation_mapping_cupy bunker.launch
+roslaunch elevation_mapping_cupy bit-bunker.launch
 ```
 
 ### 2. 需要修改的话题名称
@@ -134,24 +141,38 @@ if __name__ == '__main__':
 
 ## 📊 输出话题
 
-启动后，elevation_mapping会发布以下话题：
+启动后，elevation_mapping 及 Costmap 节点发布以下话题：
 
 ```
 /elevation_mapping/elevation_map_raw              # 原始地图 (5 Hz)
-    layers: elevation, traversability, variance, rgb, similarity
-
-/elevation_mapping/elevation_map_recordable       # 可记录地图 (2 Hz)
-    layers: elevation, traversability, similarity
+    layers: elevation, traversability, variance, rgb,
+            similarity, similarity_var, similarity_cvar, max_categories
 
 /elevation_mapping/filtered_elevation_map         # 滤波地图 (3 Hz)
-    layers: inpaint, smooth, min_filter, elevation, similarity
+    layers: inpaint, smooth, min_filter, elevation, traversability,
+            similarity, similarity_var, similarity_cvar, max_categories
+
+/similarity_costmap                               # 全局代价地图 (nav_msgs/OccupancyGrid)
+    frame_id: map，200×200m，分辨率 0.1m，持续累积
+    由 generate_costmap.py 从 similarity_cvar 层转换
+
+/elevation_costmap                                # 坡度局部代价地图 (nav_msgs/OccupancyGrid)
+    frame_id: odom，15×15m（跟随 GridMap 窗口），分辨率 0.1m，每帧刷新
+    由 generate_elevation_costmap.py 从 inpaint 层坡度转换
+    坐标轴：i 轴（y）和 j 轴（x）均已翻转，与 OccupancyGrid 约定对齐
+
+/livox_costmap                                    # 点云局部代价地图 (nav_msgs/OccupancyGrid)
+    frame_id: odom，20×20m（以机器人为中心滚动），分辨率 0.1m，每帧刷新
+    由 generate_livox_costmap.py 从 /livox/points 过滤地面后转换
+    过滤规则：25cm 盲区 | 高度 0.2m~2.0m（相对 base_link z）| 每格 ≥2 个点才标障碍
+    不累积历史，动态障碍不留痕迹
 ```
 
 ## ⚙️ 关键参数说明
 
 ### 地图参数
-- `resolution: 0.15` - 15cm分辨率（较大的室外环境）
-- `map_length: 22.5` - 22.5m × 22.5m 地图尺寸
+- `resolution: 0.1` - 10cm 分辨率
+- `map_length: 15` - 15m × 15m 地图尺寸（即 150×150 格）
 
 ### 性能参数
 - `update_pose_fps: 20.0` - 位姿更新频率，匹配FAST-LIO

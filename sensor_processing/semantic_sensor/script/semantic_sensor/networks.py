@@ -11,15 +11,6 @@ import torch.nn.functional as NF
 import numpy as np
 import cupy as cp
 
-from detectron2.utils.logger import setup_logger
-
-setup_logger()
-
-from detectron2 import model_zoo
-from detectron2.engine import DefaultPredictor
-from detectron2.config import get_cfg
-from detectron2.data import MetadataCatalog
-
 from semantic_sensor.DINO.modules import DinoFeaturizer
 
 from semantic_sensor.pointcloud_parameters import (
@@ -27,6 +18,23 @@ from semantic_sensor.pointcloud_parameters import (
     FeatureExtractorParameter,
 )
 from semantic_sensor.utils import encode_max
+
+
+def _import_detectron2_modules():
+    try:
+        from detectron2.utils.logger import setup_logger
+        from detectron2 import model_zoo
+        from detectron2.engine import DefaultPredictor
+        from detectron2.config import get_cfg
+        from detectron2.data import MetadataCatalog
+    except ImportError as exc:
+        raise ImportError(
+            "detectron2 is required only when using detectron models. "
+            "Install it with: python3 -m pip install 'git+https://github.com/facebookresearch/detectron2.git'"
+        ) from exc
+
+    setup_logger()
+    return model_zoo, DefaultPredictor, get_cfg, MetadataCatalog
 
 
 def resolve_model(name, config=None):
@@ -176,6 +184,7 @@ class PytorchModel:
 
 class DetectronModel:
     def __init__(self, weights, param):
+        model_zoo, DefaultPredictor, get_cfg, MetadataCatalog = _import_detectron2_modules()
         self.cfg = get_cfg()
         self.param = param
 

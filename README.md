@@ -196,3 +196,65 @@ semantic_seg:
 `max_categories` 已加入两个发布话题的 `layers` 列表：
 - `/elevation_mapping/elevation_map_raw`（5Hz）
 - `/elevation_mapping/filtered_elevation_map`（3Hz）
+---
+
+## 针对 Conda Python 3.10 (Numpy/PyTorch 高版本) 的编译与部署指南
+
+在使用 Ubuntu 20.04 (ROS Noetic) 并结合高版本深度学习框架 (通过 Conda 管理 Python 3.10) 时，直接编译本工程会遇到一系列系统环境、路径、以及新旧库的兼容性问题。在此记录成功编译并运行的方法以及踩坑记录。
+
+### 1. 编译前环境准备与依赖修复
+
+由于 Conda 环境自带独立的 Python 版本，ROS的默认编译系统找不到相关的 Python 包。需要在启动 `catkin_make` 前，在 Conda 环境中安装 ROS 构建所需模块。
+
+**踩坑 1：缺少 `empy` 或 `empy` 版本过高导致报错 `PY_em`**
+*   **现象**: `cmake` 时报错 `Unable to find either executable 'empy' or Python module 'em'...`
+*   **原因**: Python 3.10 下如果直接 `pip install empy`，默认会安装 4.x 版本的 `empy`，而 ROS Noetic 的 CMake 脚本还在使用已被 4.x 移除的旧版 `em` 模块语法。
+*   **解决**: 强制安装 `<4` 的版本：
+    ```bash
+    conda activate <your_env>
+    pip install catkin_pkg rospkg defusedxml netifaces
+    pip install "empy<4"
+    ```
+
+### 2. 绕开 GLIBCXX (libstdc++) 版本冲突
+
+**踩坑 2：Conda 标准库与系统 GCC 不兼容**
+*   **现象**: 运行 `catkin_make` 最后进行链接(Link)生成 `.so` 和可执行文件时，提示 `undefined reference to std::condition_variable::wait(...)@GLIBCXX_3.4.30` 等类似错误。
+*   **原因**: Conda 中安装的 PyTorch 或其他三方库是基于更高版本 C++ 标准库 (`libstdc++.so.6`) 编译的，而 Ubuntu 20.04 系统默认的 GCC 9 工具链支持的最高版本不足。
+*   **错误尝试**: 如果试图在 Conda 里通过 `conda install gcc_linux-64` 引入 Conda 的编译器来编译 ROS 环境，又会导致链接时找不到外部的 ROS 库、系统 OpenCV 甚至无法定位系统 `libpthread`。
+*   **正确解决**: 保持使用系统的默认 `cc/c++`，但升级 Ubuntu 系统的 `libstdc++6` 动态库：
+    ```bash
+    sudo apt-get update && sudo apt-get install software-properties-common -y
+    sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y
+    sudo apt-get update && sudo apt-get install libstdc++6 -y
+    ```
+    *注意：若之前为了解决此问题在 Conda 中安装过 `sysroot_linux-64`、`gcc_linux-64` 等，请先用 `conda remove` 将其卸载并清理 C/C++ 环境变量 (`unset CC CXX LDFLAGS CFLAGS CXXFLAGS`)，防止它们污染系统的链接路径。*
+
+### 3. 执行特殊的 CMake 编译指令
+
+环境清理完毕后，由于 ROS 默认绑定系统的 python3，需要通过传入 `-D` 参数强制重定向到你的 Conda Python，再进行编译。
+
+```bash
+# 激活 ROS 环境
+source /opt/ros/noetic/setup.bash
+
+# 清理旧的编译缓存（重要）
+rm -rf build devel
+
+# 使用指定的 Conda Python 路径进行增量或者独立编译
+catkin_make -DCATKIN_WHITELIST_PACKAGES="elevation_map_msgs;elevation_mapping_cupy" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPYTHON_EXECUTABLE=/opt/conda/envs/<your_env>/bin/python \
+            -DPYTHON_INCLUDE_DIR=/opt/conda/envs/<your_env>/include/python3.10 \
+            -DPYTHON_LIBRARY=/opt/conda/envs/<your_env>/lib/libpython3.10.so
+```
+
+### 4. 运行时 numpy 高版本 API 废弃的修复
+
+**踩坑 3：`numpy.bool8` AttributeError 导致节点在启动瞬间闪退崩溃**
+*   **现象**: `roslaunch` 后，RViz 正常跳出（如果有屏幕），但 `elevation_mapping_node` 崩溃报错：`AttributeError: module 'numpy' has no attribute 'bool8'`。
+*   **原因**: Python 3.10 环境中使用的 `numpy >= 1.24` 已经彻底移除了 `np.bool8`，而之前编写的 CuPy 脚本 (`cp.ones(..., cp.bool8)`) 还在使用这个旧名称。
+*   **解决**: 需要手动修改代码。搜索工作空间下所有 `cp.bool8` 的使用，并替换成 `cp.bool_`：
+    *   文件位置：`elevation_mapping_cupy/script/elevation_mapping_cupy/semantic_map.py` (在 `__init__` 和 `clear` 附近)。
+    *   将 `cp.bool8` 修改为安全的 `cp.bool_`。
+修改完后，重新 `roslaunch` 即可完美建立基于高版本 Python / CuPy / PyTorch 的地形建图环境。

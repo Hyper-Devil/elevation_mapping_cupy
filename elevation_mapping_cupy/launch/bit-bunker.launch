@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <launch>
+    <arg name="use_sim_time" default="false"/>
+    <arg name="rviz" default="true"/>
+    <param name="/use_sim_time" value="$(arg use_sim_time)"/>
+
     <!-- Elevation mapping node for Bunker robot -->
     <node pkg="elevation_mapping_cupy" type="elevation_mapping_node" name="elevation_mapping" output="screen">
         <rosparam command="load" file="$(find elevation_mapping_cupy)/config/setups/bunker/bunker_parameters.yaml"/>
@@ -11,10 +15,32 @@
     <node pkg="elevation_mapping_cupy" type="generate_costmap.py" name="gridmap_to_costmap" output="screen">
         <param name="costmap_frame" value="map"/>
         <param name="map_size" value="200.0"/>
-        <param name="resolution" value="0.5"/>
+        <param name="resolution" value="0.1"/>
         <param name="similarity_layer" value="similarity_cvar"/>
         <!-- <param name="unknown_threshold" value="0.01"/>
         <param name="obstacle_threshold" value="0.3"/> -->
+    </node>
+
+    <!-- 将 GridMap 的 inpaint(elevation) 层转换为 Local Costmap -->
+    <!-- <node pkg="elevation_mapping_cupy" type="generate_elevation_costmap.py" name="elevation_to_costmap" output="screen">
+        <param name="costmap_frame" value="odom"/>
+        <param name="gridmap_frame" value="map"/>
+        <param name="elevation_layer" value="inpaint"/>
+        <param name="flat_threshold" value="0.15"/>
+        <param name="obstacle_threshold" value="0.40"/>
+    </node> -->
+
+    <!-- 将 Livox 原始点云过滤地面后转换为 Local Costmap（可选，替代 elevation_costmap） -->
+    <node pkg="elevation_mapping_cupy" type="generate_livox_costmap.py" name="generate_livox_costmap" output="screen">
+        <param name="cloud_topic" value="/livox/points"/>
+        <param name="costmap_frame" value="odom"/>
+        <param name="robot_frame" value="base_link"/>
+        <param name="local_size" value="20.0"/>
+        <param name="resolution" value="0.10"/>
+        <param name="min_obstacle_height" value="0.2"/>
+        <param name="max_obstacle_height" value="2.0"/>
+        <param name="sensor_max_range" value="15.0"/>
+        <param name="min_points_per_cell" value="2"/>
     </node>
 
     <!-- 为点云的强度通道赋予 Costmap 信息 -->
@@ -24,6 +50,6 @@
         <param name="time_slop" value="0.5"/>
     </node> -->
 
-    <!-- start rviz2 with bunker.rviz -->
-    <node pkg="rviz" type="rviz" name="bunker_rviz" output="screen" args="-d $(find elevation_mapping_cupy)/rviz/bunker.rviz"/>
+    <!-- start rviz with bunker.rviz -->
+    <node if="$(arg rviz)" pkg="rviz" type="rviz" name="bunker_rviz" output="screen" args="-d $(find elevation_mapping_cupy)/rviz/bunker.rviz"/>
 </launch>

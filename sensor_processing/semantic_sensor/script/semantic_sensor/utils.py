@@ -1,10 +1,6 @@
 import numpy as np
 import cupy as cp
 
-from detectron2.utils.logger import setup_logger
-
-setup_logger()
-
 
 def encode_max(maxim, index):
     maxim, index = cp.asarray(maxim, dtype=cp.float32), cp.asarray(index, dtype=cp.uint32)

@@ -18,7 +18,7 @@ image_channel_fusions:
 subscribers:
   # LiDAR pointcloud from FAST-LIO
   lidar_points:
-    topic_name: '/accumulated_map_points'           # FAST-LIO /cloud_registered
+    topic_name: '/cloud_registered'           # FAST-LIO /cloud_registered
     data_type: pointcloud
     # channels: ['rgb']                       # Uncomment if your pointcloud contains RGB data
   
