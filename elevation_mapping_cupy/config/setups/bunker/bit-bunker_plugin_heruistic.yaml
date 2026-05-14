@@ -1,0 +1,143 @@
+# Heuristic Traversability Plugin Pipeline
+# 执行顺序：高程预处理 → 几何分量 → 语义分量 → 融合
+#
+# 依赖链：
+#   elevation → min_filter → inpaint → smooth
+#                                       ├──► traversability_slope
+#                                       └──► traversability_roughness
+#   sem_road/grass/... → sem_cost / sem_sensitivity
+#                                       ┐
+#   traversability_slope/roughness      ├──► heuristic_traversability
+#   sem_cost / sem_sensitivity          ┘
+#
+# 融合公式：
+#   geo       = u_rough × roughness + v_slope × slope
+#   geo_gated = 1 − sensitivity × (1 − geo)            # 几何门（信任度加权）
+#   trav      = geo_gated × (1 − cost)                 # 几何门 AND 语义门
+
+# ── 高程预处理 ────────────────────────────────────────────────────────────────
+
+min_filter:
+  enable: True   # 用作语义投影的填充高程源（kernel 用 min_filter 输出代替原始 elevation）
+  fill_nan: False
+  is_height_layer: True
+  layer_name: "min_filter"
+  extra_params:
+    dilation_size: 1     # 每次迭代向外扩 1 格 (0.1m)
+    iteration_n: 10      # 共扩 10 格 = 1m，覆盖 LiDAR 条纹间隙
+
+inpainting:
+  enable: True
+  fill_nan: False
+  is_height_layer: True
+  layer_name: "inpaint"
+  extra_params:
+    method: "telea"                  # 供 roughness_filter 使用
+
+smooth_filter:
+  enable: True
+  fill_nan: False
+  is_height_layer: True
+  layer_name: "smooth"
+  extra_params:
+    input_layer_name: "inpaint"    # inpaint 无 NaN，避免 uniform_filter 传播空洞
+    size: 5                        # 每次 uniform_filter 的核大小（格数，建议奇数）
+    num_passes: 2                  # 迭代次数；等效平滑宽度 = num_passes*(size-1)+1 格
+
+# ── 几何可通行性分量 ──────────────────────────────────────────────────────────
+
+traversability_slope:
+  type: slope_filter
+  enable: True
+  fill_nan: False
+  is_height_layer: False
+  layer_name: "traversability_slope"
+  extra_params:
+    input_layer: "smooth"            # smooth 先去除测量噪声，足印均值核再做车体尺度平均
+    resolution: 0.1                  # 与 bunker_parameters.yaml 中 resolution 一致
+    contact_length: 0.56             # m，履带接地长度（pitch 估计尺度）
+    track_width: 0.15                # m，单侧履带宽
+    total_width: 0.778               # m，车体总宽（track_separation = 0.778-0.15 = 0.628 m）
+    midpoint: 0.349                  # rad，坡度达到此值时 traversability = 0.5（≈ 20°）
+    steepness: 8.4                   # 1/rad，由 trav(40°)≈0.05 反算：ln(19)/(0.698-0.349)
+
+traversability_roughness:
+  type: roughness_filter
+  enable: True
+  fill_nan: False
+  is_height_layer: False
+  layer_name: "traversability_roughness"
+  extra_params:
+    input_layer: "smooth"
+    resolution: 0.1
+    low_radius: 0.1                  # m，履带单节可顺从的最小特征尺度（≈ track_width/2）
+    high_radius: 0.56                # m，车体接地长度，超出此尺度的高差属于坡度而非粗糙度
+    midpoint: 0.18                   # m，roughness 达到此值时 traversability = 0.5
+    steepness: 25.0                  # 1/m，由 trav(0.30m)≈0.05 反算：ln(19)/(0.30-0.18)
+
+# ── 语义属性查表 ──────────────────────────────────────────────────────────────
+
+sem_cost:
+  type: semantic_class_layer
+  enable: True
+  fill_nan: False
+  is_height_layer: False
+  layer_name: "sem_cost"
+  extra_params:
+    layers:         ['sem_road',   'sem_dirt',
+                     'sem_grass',
+                     'sem_bush',   'sem_water',   'sem_stone',
+                     'sem_person', 'sem_fence', 'sem_tree', 'sem_building', 'sem_bicycle', 'sem_car', 'sem_train', 'sem_bus', 'sem_truck','sem_boat', 'sem_cat', 'sem_dog', 'sem_tent', 'sem_river', 'sem_sky']
+    SemCost:        [0.0,  0.0,
+                     0.2,
+                     0.5,  0.5,  0.5,
+                     1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    output_mode:    "cost"
+    default_cost:   0.5              # 未被覆盖格子（含 sem_6s5f2w）
+
+sem_sensitivity:
+  type: semantic_class_layer
+  enable: True
+  fill_nan: False
+  is_height_layer: False
+  layer_name: "sem_sensitivity"
+  extra_params:
+    layers:         ['sem_road',   'sem_dirt',
+                     'sem_grass',
+                     'sem_bush',   'sem_water',  
+                    'sem_stone', 'sem_person', 'sem_fence',   'sem_tree',     'sem_building','sem_bicycle','sem_car',     'sem_train',    'sem_bus',    'sem_truck','sem_boat',   'sem_cat',     'sem_dog',      'sem_tent',   'sem_river',  'sem_sky']
+    SemSensitivity: [1.0,  1.0,
+                     0.5,
+                     0.2,  0.2, 
+                     1.0, 1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,1.0,  1.0,  1.0,  1.0,  0.2,  0.2]
+    output_mode:    "sensitivity"
+    default_sensitivity: 1.0
+
+# ── 融合可通行性 ──────────────────────────────────────────────────────────────
+
+heuristic_traversability:
+  type: heuristic_traversability
+  enable: True
+  fill_nan: False                    # NaN 由插件内部按 is_valid 写入
+  is_height_layer: False
+  layer_name: "traversability_heuristic"
+  extra_params:
+    roughness_layer:       "traversability_roughness"
+    slope_layer:           "traversability_slope"
+    sem_sensitivity_layer: "sem_sensitivity"
+    sem_cost_layer:        "sem_cost"
+    # 公式：trav = (1 - sens × (1 - geo)) × (1 - cost)，其中 geo = u_rough×rough + v_slope×slope
+    # sens 为对几何读数的信任度（0=忽略几何，1=完全依赖几何）；cost 为语义硬代价（1=硬障碍）
+    u_rough:   0.4                   # 粗糙度内层权重（u_rough + v_slope = 1）
+    v_slope:   0.6                   # 坡度内层权重
+
+# ── 可视化层（可选，保留原有功能）────────────────────────────────────────────
+
+semantic_filter:
+  type: semantic_filter
+  enable: True
+  fill_nan: False
+  is_height_layer: False
+  layer_name: "max_categories"
+  extra_params:
+    classes: ['^sem_(?!cost|sensitivity).*$']   # 排除 sem_cost/sem_sensitivity 插件层

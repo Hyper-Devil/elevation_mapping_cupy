@@ -3,22 +3,30 @@
 <launch>
     <arg name="use_sim_time" default="false"/>
     <arg name="rviz" default="true"/>
+    <!-- heuristic:=true  使用几何+语义融合可通行性（bit-bunker_sensor_heruistic.yaml）
+         heuristic:=false 使用原有语义相似度流水线（bit-bunker_sensor.yaml）  -->
+    <arg name="heuristic" default="false"/>
     <param name="/use_sim_time" value="$(arg use_sim_time)"/>
 
     <!-- Elevation mapping node for Bunker robot -->
     <node pkg="elevation_mapping_cupy" type="elevation_mapping_node" name="elevation_mapping" output="screen">
         <rosparam command="load" file="$(find elevation_mapping_cupy)/config/setups/bunker/bunker_parameters.yaml"/>
-        <rosparam command="load" file="$(find elevation_mapping_cupy)/config/setups/bunker/bit-bunker_sensor.yaml"/>
+        <!-- 根据 heuristic 参数选择传感器/插件配置 -->
+        <rosparam unless="$(arg heuristic)" command="load" file="$(find elevation_mapping_cupy)/config/setups/bunker/bit-bunker_sensor.yaml"/>
+        <rosparam if="$(arg heuristic)"     command="load" file="$(find elevation_mapping_cupy)/config/setups/bunker/bit-bunker_sensor_heruistic.yaml"/>
     </node>
 
-    <!-- 将 GridMap 的 similarity 层转换为 Costmap -->
+    <!-- 将 GridMap 层转换为 Costmap
+         heuristic 模式使用 traversability_heuristic，否则使用 similarity_cvar -->
     <node pkg="elevation_mapping_cupy" type="generate_costmap.py" name="gridmap_to_costmap" output="screen">
         <param name="costmap_frame" value="map"/>
         <param name="map_size" value="200.0"/>
         <param name="resolution" value="0.1"/>
-        <param name="similarity_layer" value="similarity_cvar"/>
-        <!-- <param name="unknown_threshold" value="0.01"/>
-        <param name="obstacle_threshold" value="0.3"/> -->
+        <param unless="$(arg heuristic)" name="similarity_layer" value="similarity_cvar"/>
+        <param if="$(arg heuristic)"     name="similarity_layer" value="traversability_heuristic"/>
+        <!-- 调整阈值以适配 heuristic 层的值域约定（越大越可通行）-->
+        <param if="$(arg heuristic)" name="obstacle_threshold" value="0.3"/>
+        <param if="$(arg heuristic)" name="free_threshold"     value="0.7"/>
     </node>
 
     <!-- 将 GridMap 的 inpaint(elevation) 层转换为 Local Costmap -->

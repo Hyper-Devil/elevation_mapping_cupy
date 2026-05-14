@@ -174,6 +174,14 @@ if __name__ == '__main__':
 - `resolution: 0.1` - 10cm 分辨率
 - `map_length: 15` - 15m × 15m 地图尺寸（即 150×150 格）
 
+### slope_filter 参数（bit-bunker_plugin_heruistic.yaml）
+- `contact_length: 0.56` - 履带接地长度 (m)
+- `track_width: 0.15` - 单侧履带宽 (m)
+- `total_width: 0.778` - 车体总宽 (m)，履带中心间距 = 0.778 - 0.15 = 0.628 m
+- `critical_value: 1.047` - 坡度达到 60°（π/3 rad）时可通行性降为 0
+
+坡度计算在 **0.6 × 0.6 m 的足印范围**内取均值高程后再求梯度，对应接地长度（560 mm）和履带中心间距（628 mm），使坡度估计反映整车实际经历的俯仰/横滚，而非单点噪声。
+
 ### 性能参数
 - `update_pose_fps: 20.0` - 位姿更新频率，匹配FAST-LIO
 - `map_acquire_fps: 10.0` - 地图获取频率

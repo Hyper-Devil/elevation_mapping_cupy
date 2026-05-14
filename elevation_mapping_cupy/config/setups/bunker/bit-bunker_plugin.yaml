@@ -11,13 +11,15 @@ min_filter:
     iteration_n: 30                           # The number of iterations
 
 # Apply smoothing.
-smooth_filter:                                
+smooth_filter:
   enable: True
   fill_nan: False
   is_height_layer: True
   layer_name: "smooth"
   extra_params:
     input_layer_name: "min_filter"
+    size: 3                        # 每次 uniform_filter 的核大小（格数，建议奇数）
+    num_passes: 2                  # 迭代次数；等效平滑宽度 = num_passes*(size-1)+1 格
 
 # Apply inpainting using opencv
 inpainting:

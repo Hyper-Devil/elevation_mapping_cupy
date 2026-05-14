@@ -19,7 +19,11 @@ orientation_noise_thresh: 0.01                  # if the orientation change is b
 position_lowpass_alpha: 0.2                     # lowpass filter alpha used for detecting movements.
 orientation_lowpass_alpha: 0.2                  # lowpass filter alpha used for detecting movements.
 min_valid_distance: 0.15                         # points with shorter distance will be filtered out.
-max_height_range: 2.0                           # points higher than this value from sensor will be filtered out to disable ceiling.
+# max_height_range 的 z 轴基准是 LiDAR 传感器在 map 系的实际高度（由 TF 决定），
+# 而非 base_link 或地面。过滤条件为：点的世界高度 - 传感器世界高度 > max_height_range。
+# 低于此阈值的悬空物体（如低垂树枝）会被当作"地面"录入高程图而非识别为障碍。
+# Livox 安装高度约 1.0m，设为 1.0m 可将接受上限控制在约 2.0m（地面绝对高度）。
+max_height_range: 1.0                           # points higher than this value from sensor will be filtered out to disable ceiling.
 ramped_height_range_a: 0.3                      # if z > max(d - ramped_height_range_b, 0) * ramped_height_range_a + ramped_height_range_c, reject.
 ramped_height_range_b: 1.0                      # if z > max(d - ramped_height_range_b, 0) * ramped_height_range_a + ramped_height_range_c, reject.
 ramped_height_range_c: 0.2                      # if z > max(d - ramped_height_range_b, 0) * ramped_height_range_a + ramped_height_range_c, reject.
@@ -30,7 +34,7 @@ map_acquire_fps: 10.0                           # Raw map is fetched from GPU me
 publish_statistics_fps: 1.0                     # Publish statistics topic in this fps.
 
 max_ray_length: 10.0                            # maximum length for ray tracing.
-cleanup_step: 0.1                               # subtitute this value from validity layer at visibiltiy cleanup.
+cleanup_step: 0.02                               # subtitute this value from validity layer at visibiltiy cleanup.
 cleanup_cos_thresh: 0.1                         # subtitute this value from validity layer at visibiltiy cleanup.
 
 safe_thresh: 0.7                                # if traversability is smaller, it is counted as unsafe cell.

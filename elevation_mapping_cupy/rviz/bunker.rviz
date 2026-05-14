@@ -73,7 +73,7 @@ Visualization Manager:
       Value: false
     - Class: rviz/Image
       Enabled: true
-      Image Topic: /hikrobot_camera/camera_left/image_raw
+      Image Topic: /hikrobot_camera_L/image_raw
       Max Value: 1
       Median window: 5
       Min Value: 0
@@ -106,7 +106,7 @@ Visualization Manager:
       Size (Pixels): 3
       Size (m): 0.10000000149011612
       Style: Flat Squares
-      Topic: /cloud_registered
+      Topic: /accumulated_map_points
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
@@ -136,10 +136,10 @@ Visualization Manager:
       Autocompute Intensity Bounds: true
       Class: grid_map_rviz_plugin/GridMap
       Color: 200; 200; 200
-      Color Layer: inpaint
+      Color Layer: traversability_heuristic
       Color Transformer: IntensityLayer
       Enabled: true
-      Height Layer: inpaint
+      Height Layer: traversability_heuristic
       Height Transformer: Layer
       History Length: 1
       Invert Rainbow: false
@@ -215,7 +215,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 36.01704406738281
+      Distance: 33.89491271972656
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -231,9 +231,9 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.2547968626022339
+      Pitch: 1.354797124862671
       Target Frame: base_link
-      Yaw: 5.200442314147949
+      Yaw: 3.045426845550537
     Saved: ~
 Window Geometry:
   Displays:
@@ -253,7 +253,7 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1854
-  X: 66
-  Y: 32
+  X: 72
+  Y: 27
   overlay:
     collapsed: false

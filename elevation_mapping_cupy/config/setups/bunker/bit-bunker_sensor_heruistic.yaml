@@ -1,0 +1,57 @@
+#### Plugins ########
+plugin_config_file: '$(rospack find elevation_mapping_cupy)/config/setups/bunker/bit-bunker_plugin_heruistic.yaml'
+
+#### Fusion algorithms ########
+pointcloud_channel_fusions:
+  default: 'average'
+
+image_channel_fusions:
+  rgb: 'color'
+  default: 'exponential'
+  similarity: 'exponential_variance'
+  similarity_.*: 'exponential_variance'
+
+#### Subscribers ########
+subscribers:
+  lidar_points:
+    topic_name: '/accumulated_map_points'
+    data_type: pointcloud
+
+  rgb_camera:
+    topic_name: '/hikrobot_camera_L/image_raw'
+    camera_info_topic_name: '/hikrobot_camera_L/camera_info_raw'
+    data_type: image
+    channels: ['rgb']
+
+  similarity_feature:
+    topic_name: '/hikrobot_camera_L/similarity_traversability'
+    camera_info_topic_name: '/hikrobot_camera_L/camera_info_raw'
+    channel_info_topic_name: '/hikrobot_camera_L/similarity_traversability_info'
+    data_type: image
+
+  semantic_seg:
+    topic_name: '/hikrobot_camera_L/semantic_image'
+    camera_info_topic_name: '/hikrobot_camera_L/camera_info_raw'
+    channel_info_topic_name: '/hikrobot_camera_L/semantic_info'
+    data_type: image
+    channels: ['sem_6s5f2w', 'sem_road', 'sem_dirt', 'sem_grass', 'sem_bush', 'sem_water', 'sem_stone', 'sem_person', 'sem_fence', 'sem_tree', 'sem_building', 'sem_bicycle', 'sem_car', 'sem_train', 'sem_bus', 'sem_truck', 'sem_boat', 'sem_cat', 'sem_dog', 'sem_tent', 'sem_river', 'sem_sky']
+
+#### Publishers ########
+publishers:
+  elevation_map_raw:
+    layers: ['elevation', 'traversability', 'variance', 'rgb',
+             'traversability_slope', 'traversability_roughness',
+             'sem_cost', 'sem_sensitivity',
+             'traversability_heuristic',
+             'max_categories']
+    basic_layers: ['elevation']
+    fps: 5.0
+
+  filtered_elevation_map:
+    layers: ['elevation', 'inpaint', 'smooth',
+             'traversability_slope', 'traversability_roughness',
+             'sem_cost', 'sem_sensitivity',
+             'traversability_heuristic',
+             'max_categories']
+    basic_layers: ['inpaint']
+    fps: 3.0

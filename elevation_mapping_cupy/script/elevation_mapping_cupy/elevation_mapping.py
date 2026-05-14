@@ -301,7 +301,7 @@ class ElevationMap:
                     resolution=self.resolution,
                     width=self.cell_n,
                     height=self.cell_n,
-                    tolerance_z_collision=0.10,
+                    tolerance_z_collision=0.50,
                 )
                 break
 
@@ -519,8 +519,8 @@ class ElevationMap:
             # Not implemented yet.
             D *= 0
         elif distortion_model == "plumb_bob":
-            # Not implemented yet.
-            D *= 0
+            # plumb_bob == radtan (D = [k1, k2, p1, p2, k3])
+            pass
         else:
             # Not implemented yet.
             D *= 0
@@ -537,8 +537,25 @@ class ElevationMap:
         self.valid_correspondence[:, :] = False
 
         with self.map_lock:
+            # 刷新 min_filter 用作投影填充层，避免原始 elevation 稀疏导致语义投影丢失
+            # 若 min_filter 插件不在 pipeline 中（如未配置），回退到原始 elevation
+            if "min_filter" in self.plugin_manager.layer_names:
+                self.plugin_manager.update_with_name(
+                    "min_filter",
+                    self.elevation_map,
+                    self.layer_names,
+                    self.semantic_map.semantic_map,
+                    self.semantic_map.layer_names,
+                    self.base_rotation,
+                    self.semantic_map.elements_to_shift,
+                )
+                elevation_filled = self.plugin_manager.get_map_with_name("min_filter")
+            else:
+                elevation_filled = self.elevation_map[0]
+
             self.image_to_map_correspondence_kernel(
                 self.elevation_map,
+                elevation_filled,
                 x1,
                 y1,
                 z1,

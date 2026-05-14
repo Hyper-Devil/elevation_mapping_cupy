@@ -13,7 +13,7 @@ def image_to_map_correspondence_kernel(resolution, width, height, tolerance_z_co
     The function returns a kernel that can be used to perform the correspondence calculation.
     """
     _image_to_map_correspondence_kernel = cp.ElementwiseKernel(
-        in_params="raw U map, raw U x1, raw U y1, raw U z1, raw U P, raw U K, raw U D, raw U image_height, raw U image_width, raw U center",
+        in_params="raw U map, raw U elevation_filled, raw U x1, raw U y1, raw U z1, raw U P, raw U K, raw U D, raw U image_height, raw U image_width, raw U center",
         out_params="raw U uv_correspondence, raw B valid_correspondence",
         preamble=string.Template(
             """
@@ -35,8 +35,8 @@ def image_to_map_correspondence_kernel(resolution, width, height, tolerance_z_co
             """
             int cell_idx = get_map_idx(i, 0);
             
-            // return if gridcell has no valid height
-            if (map[get_map_idx(i, 2)] != 1){
+            // return if gridcell has no valid filled-elevation (after min_filter)
+            if (isnan(elevation_filled[i])){
                 return;
             }
             
@@ -47,7 +47,7 @@ def image_to_map_correspondence_kernel(resolution, width, height, tolerance_z_co
             // gridcell 3D point in worldframe TODO reverse x and y
             float p1 = (x0-(${width}/2)) * ${resolution} + center[0];
             float p2 = (y0-(${height}/2)) * ${resolution} + center[1];
-            float p3 = map[cell_idx] +  center[2];
+            float p3 = elevation_filled[i] +  center[2];
             
             // reproject 3D point into image plane
             float u = p1 * P[0]  + p2 * P[1] + p3 * P[2] + P[3];      
@@ -93,7 +93,7 @@ def image_to_map_correspondence_kernel(resolution, width, height, tolerance_z_co
             int y0_c = y0;
             int x0_c = x0;
             float total_dis = get_l2_distance(x0_c, y0_c, x1,y1);
-            float z0 = map[cell_idx];
+            float z0 = elevation_filled[i];
             float delta_z = z1-z0;
             
             

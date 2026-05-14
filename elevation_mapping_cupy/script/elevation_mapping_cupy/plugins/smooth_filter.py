@@ -21,9 +21,18 @@ class SmoothFilter(PluginBase):
         **kwargs: Additional keyword arguments.
     """
 
-    def __init__(self, cell_n: int = 100, input_layer_name: str = "elevation", **kwargs):
+    def __init__(
+        self,
+        cell_n: int = 100,
+        input_layer_name: str = "elevation",
+        size: int = 3,
+        num_passes: int = 2,
+        **kwargs,
+    ):
         super().__init__()
         self.input_layer_name = input_layer_name
+        self.size = int(size)
+        self.num_passes = int(num_passes)
 
     def __call__(
         self,
@@ -33,18 +42,6 @@ class SmoothFilter(PluginBase):
         plugin_layer_names: List[str],
         *args,
     ) -> cp.ndarray:
-        """
-
-        Args:
-            elevation_map (cupy._core.core.ndarray):
-            layer_names (List[str]):
-            plugin_layers (cupy._core.core.ndarray):
-            plugin_layer_names (List[str]):
-            *args ():
-
-        Returns:
-            cupy._core.core.ndarray:
-        """
         if self.input_layer_name in layer_names:
             idx = layer_names.index(self.input_layer_name)
             h = elevation_map[idx]
@@ -54,6 +51,6 @@ class SmoothFilter(PluginBase):
         else:
             print("layer name {} was not found. Using elevation layer.".format(self.input_layer_name))
             h = elevation_map[0]
-        hs1 = ndimage.uniform_filter(h, size=3)
-        hs1 = ndimage.uniform_filter(hs1, size=3)
-        return hs1
+        for _ in range(self.num_passes):
+            h = ndimage.uniform_filter(h, size=self.size)
+        return h

@@ -136,7 +136,7 @@ class PluginManager(object):
 
     def load_plugin_settings(self, file_path: str):
         print("Start loading plugins...")
-        cfg = YAML().load(open(file_path, "r"))
+        cfg = YAML().load(open(file_path, "r", encoding="utf-8"))
         plugin_params = []
         extra_params = []
         for k, v in cfg.items():
