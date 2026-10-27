@@ -65,9 +65,13 @@ class SlopeFilter(PluginBase):
         total_width: float = 0.778,
         midpoint: float = math.radians(40),
         steepness: float = 8.4,
+        size: int = 5,
+        num_passes: int = 0,
         **kwargs,
     ):
         super().__init__()
+        self.pre_smooth_size = max(1, int(size))
+        self.pre_smooth_passes = max(0, int(num_passes))
         self.input_layer = input_layer
         self.resolution = float(resolution)
         self.midpoint = float(midpoint)
@@ -101,6 +105,8 @@ class SlopeFilter(PluginBase):
             return cp.zeros_like(elevation_map[0], dtype=cp.float32)
 
         h = h.astype(cp.float64)
+        for _ in range(self.pre_smooth_passes):
+            h = ndimage.uniform_filter(h, size=self.pre_smooth_size)
 
         # 在车体足印范围内做均值平滑，使梯度反映整车尺度的倾斜而非单格噪声
         h = ndimage.uniform_filter(h, size=self.footprint_cells)

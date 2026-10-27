@@ -62,16 +62,20 @@ class SemanticClassLayer(PluginBase):
         output_mode: str = "cost",
         default_cost: float = 0.5,
         default_sensitivity: float = 1.0,
+        default_index: int = 0,
         **kwargs,
     ):
         super().__init__()
+        if output_mode not in ("cost", "sensitivity", "index"):
+            raise ValueError(f"Unknown output_mode: {output_mode}")
+        self.default_index = int(default_index)
         # Only the list matching output_mode is required; the other may be omitted.
         if output_mode == "cost":
             if len(SemCost) != len(layers):
                 raise ValueError(
                     f"SemanticClassLayer(cost): layers({len(layers)}) and SemCost({len(SemCost)}) must have the same length"
                 )
-        else:
+        elif output_mode == "sensitivity":
             if len(SemSensitivity) != len(layers):
                 raise ValueError(
                     f"SemanticClassLayer(sensitivity): layers({len(layers)}) and SemSensitivity({len(SemSensitivity)}) must have the same length"
@@ -107,7 +111,8 @@ class SemanticClassLayer(PluginBase):
                 probs.append(layer.astype(cp.float32))
                 valid_class_indices.append(i)
 
-        default_val = self.default_cost if self.output_mode == "cost" else self.default_sensitivity
+        default_val = {"cost": self.default_cost, "sensitivity": self.default_sensitivity,
+                       "index": self.default_index}[self.output_mode]
 
         if not probs:
             return cp.full_like(elevation_map[0], default_val, dtype=cp.float32)
@@ -124,8 +129,10 @@ class SemanticClassLayer(PluginBase):
         # Look up the requested attribute for each cell's winning class
         if self.output_mode == "cost":
             result = self.sem_cost[class_idx]
-        else:
+        elif self.output_mode == "sensitivity":
             result = self.sem_sensitivity[class_idx]
+        else:
+            result = class_idx.astype(cp.float32)
 
         # Fill unobserved cells (all probabilities == 0) with the default value
         max_prob = cp.max(stacked, axis=0)

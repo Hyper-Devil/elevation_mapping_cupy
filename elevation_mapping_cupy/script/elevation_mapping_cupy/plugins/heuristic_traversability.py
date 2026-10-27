@@ -87,9 +87,13 @@ class HeuristicTraversability(PluginBase):
         sem_cost_layer: str = "sem_cost",
         u_rough: float = 0.4,
         v_slope: float = 0.6,
+        step_layer: str = "",
+        hard_sens_thresh: float = 1.0,
         **kwargs,
     ):
         super().__init__()
+        self.step_layer = step_layer
+        self.hard_sens_thresh = float(hard_sens_thresh)
         self.roughness_layer       = roughness_layer
         self.slope_layer           = slope_layer
         self.sem_sensitivity_layer = sem_sensitivity_layer
@@ -149,7 +153,15 @@ class HeuristicTraversability(PluginBase):
         sensitivity = sensitivity.astype(cp.float32)
         cost = cost.astype(cp.float32)
         geo_gated = 1.0 - sensitivity * (1.0 - geo)
-        result = cp.clip(geo_gated * (1.0 - cost), 0.0, 1.0)
+        step_eff = cp.ones_like(geo)
+        if self.step_layer:
+            step = self.get_layer_data(elevation_map, layer_names, plugin_layers,
+                                       plugin_layer_names, semantic_map,
+                                       semantic_layer_names, self.step_layer)
+            if step is None:
+                raise ValueError(f"Configured step layer is missing: {self.step_layer}")
+            step_eff = cp.where(sensitivity >= self.hard_sens_thresh, step, 1.0)
+        result = cp.clip(geo_gated * step_eff * (1.0 - cost), 0.0, 1.0)
 
         # ── Output smoothing ──────────────────────────────────────────────────
         result = ndimage.uniform_filter(result, size=3)
