@@ -814,3 +814,18 @@ calibrator 项目（`/home/whd/catkin_slam/src/calibrator/`）：
 - LiDAR 输入选 `/accumulated_map_points`（保留累积建图能力），voxel 0.3m 的稀疏性靠 min_filter 在 GPU 上快速填补，比切回 `/cloud_registered`（条纹状）更稳定
 - `min_filter` 用最小值填充偏保守（不会把高的"想象成"低的），适合避障；视觉效果想更平滑可改用 `inpaint`，但 OpenCV inpainting 需要 GPU↔CPU 传输，~30ms/帧，比 GPU min_filter（<1ms）慢一个数量级
 - 调试棋盘问题花了较多时间，关键经验：**当观察到规则空间模式而非时间跳变时，应优先检查数据稀疏性，而非融合算法或反应速度**
+
+## RELLIS-3D 制集适配（2026-10-27）
+
+制集程序直接调用本项目 `ElevationMap`，使用
+`elevation_mapping_cupy/config/setups/rellis/rellis_builder_plugins.yaml` 中保存的自制
+数据插件参数。为执行该快照，补齐坡度额外平滑、启发式融合的硬地表台阶门和整数
+语义类别输出；`step_filter` 本身原先已存在。新增选项默认保留原插件行为，专项测试
+位于 `elevation_mapping_cupy/tests/test_builder_plugins.py`。
+
+五序列已通过真实 GPU 制集和加载验收。环境、制作步骤、参数来源、兼容差异、已知
+限制和提交建议统一维护在本机
+[RELLIS-3D 制作标准](/mnt/nvme1n1/whd/traversability_dataset_builder/docs/rellis_pipeline.md)。
+宿主 `/mnt/nvme1n1/whd/emcp` 是 catkin 工作区，本源码 Git 根为其
+`src/elevation_mapping_cupy`。环境辅助脚本、依赖锁定、镜像配方与验证程序现统一位于
+[tools/rellis_runtime](tools/rellis_runtime/README.md)，工作区原入口仅作转发。

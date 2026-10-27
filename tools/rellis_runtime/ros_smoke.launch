@@ -1,0 +1,33 @@
+<launch>
+  <group ns="emcupy_smoke">
+    <node pkg="elevation_mapping_cupy" type="elevation_mapping_node" name="elevation_mapping" output="screen" required="true">
+      <rosparam command="load" file="$(find elevation_mapping_cupy)/config/setups/rellis/rellis_parameters.yaml"/>
+      <param name="resolution" value="0.1"/>
+      <param name="map_length" value="15.0"/>
+      <param name="map_frame" value="emcupy_smoke/map"/>
+      <param name="base_frame" value="emcupy_smoke/base_link"/>
+      <param name="corrected_map_frame" value="emcupy_smoke/map"/>
+      <param name="use_initializer_at_start" value="false"/>
+      <param name="enable_drift_compensation" value="false"/>
+      <param name="plugin_config_file" value="$(find elevation_mapping_cupy)/config/setups/bunker/bit-bunker_plugin_heruistic.yaml"/>
+      <rosparam>
+        pointcloud_channel_fusions: {default: average}
+        image_channel_fusions: {rgb: color, default: exponential}
+        subscribers:
+          ouster:
+            topic_name: /emcupy_smoke/points
+            data_type: pointcloud
+          rgb_camera:
+            topic_name: /emcupy_smoke/image
+            camera_info_topic_name: /emcupy_smoke/camera_info
+            data_type: image
+            channels: [rgb]
+        publishers:
+          elevation_map_raw:
+            layers: [elevation, variance, traversability, rgb, min_filter, inpaint, smooth, traversability_slope, traversability_roughness, sem_cost, sem_sensitivity, traversability_heuristic]
+            basic_layers: [elevation]
+            fps: 2.0
+      </rosparam>
+    </node>
+  </group>
+</launch>
