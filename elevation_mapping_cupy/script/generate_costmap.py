@@ -31,16 +31,16 @@ GridMap 数据布局（grid_map_msgs/Float32MultiArray）
     world_x = pos_x + (x_cells/2 - j - 0.5) * resolution
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-similarity → cost 映射规则（分档阈值）
+    similarity → cost 映射规则（分档阈值）
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  NaN 或 < unknown_threshold(0.01) : -1  不更新，保持原值
-  [unknown_threshold, 0.3)          :  40
+  非有限值                         : -1  不更新，保持原值
+  < obstacle_threshold(0.3)        : 100（包括有效零/负分数）
   [0.3, 0.5)                        :  20
   [0.5, free_threshold(0.9))        :  10
   >= free_threshold(0.9)            :   0 自由
 
   阈值均可通过 ROS 参数配置:
-    ~unknown_threshold  (默认 0.01)
+    ~unknown_threshold  历史兼容参数，不再用低分数判断未知
     ~obstacle_threshold (默认 0.3)
     ~free_threshold     (默认 0.9)
 """
@@ -157,8 +157,9 @@ class GridMapToCostmap:
         """
         cost = np.full(similarity.shape, -1, dtype=np.int8)
 
-        # NaN 或低于 unknown_threshold -> 不更新
-        known = ~np.isnan(similarity) & (similarity >= self.unknown_threshold)
+        # Unknown is represented by NaN from the count-masked CVaR layer.
+        # Finite zero/negative scores must overwrite old free cells as high risk.
+        known = np.isfinite(similarity)
         s = similarity[known]
 
         c = np.empty(s.shape, dtype=np.int8)

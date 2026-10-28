@@ -27,7 +27,7 @@ CVaR 通过对方差施加惩罚来量化并控制这一风险。
 
 下尾条件期望（最差 (1-α) 情况下的期望值）：
 
-  CVaR_α = E[ X | X ≤ q_α ]
+  CVaR_α = E[ X | X ≤ q_(1-α) ]
           = μ - σ · φ(z_α) / (1-α)
 
   其中：
@@ -57,11 +57,10 @@ CVaR 通过对方差施加惩罚来量化并控制这一风险。
   σ=0.20（低确定性）: CVaR ≈ μ - 0.35  （显著惩罚，cost 明显升高）
 '''
 import cupy as cp
-import math
-from statistics import NormalDist
 from typing import List
 
 from elevation_mapping_cupy.plugins.plugin_manager import PluginBase
+from elevation_mapping_cupy.risk_mapping import cvar_coefficient
 
 
 class CvarLayer(PluginBase):
@@ -70,17 +69,16 @@ class CvarLayer(PluginBase):
         mean_layer_name: str = "similarity",
         variance_layer_name: str = "similarity_var",
         cvar_alpha: float = 0.9,
+        count_layer_name: str = "",
+        clip_output: bool = True,
         **kwargs,
     ):
         super().__init__()
         self.mean_layer_name = mean_layer_name
         self.variance_layer_name = variance_layer_name
-
-        alpha = float(cvar_alpha)
-        alpha = min(max(alpha, 1e-6), 1.0 - 1e-6)
-        z = NormalDist().inv_cdf(alpha)
-        phi = math.exp(-0.5 * z * z) / math.sqrt(2.0 * math.pi)
-        self.cvar_scale = phi / (1.0 - alpha)
+        self.count_layer_name = count_layer_name
+        self.clip_output = clip_output
+        self.cvar_scale = cvar_coefficient(cvar_alpha)
 
     def __call__(
         self,
@@ -112,7 +110,7 @@ class CvarLayer(PluginBase):
         )
 
         if mean_map is None or variance_map is None:
-            return cp.zeros_like(elevation_map[0], dtype=cp.float32)
+            return cp.full_like(elevation_map[0], cp.nan, dtype=cp.float32)
 
         variance_map = cp.maximum(variance_map, 0.0)
         sigma_map = cp.sqrt(variance_map)
@@ -120,4 +118,15 @@ class CvarLayer(PluginBase):
         # similarity 越高越安全，故取下尾（减去方差项）
         # α 越大 → cvar_scale 越大 → 对方差惩罚越重 → 越保守
         cvar_map = mean_map - sigma_map * self.cvar_scale
+        valid = cp.isfinite(mean_map) & cp.isfinite(variance_map)
+        if self.count_layer_name:
+            count = self.get_layer_data(elevation_map, layer_names, plugin_layers,
+                                        plugin_layer_names, semantic_map,
+                                        semantic_layer_names, self.count_layer_name)
+            if count is None:
+                return cp.full_like(mean_map, cp.nan, dtype=cp.float32)
+            valid &= count > 0
+        if self.clip_output:
+            cvar_map = cp.clip(cvar_map, 0, 1)
+        cvar_map = cp.where(valid, cvar_map, cp.nan)
         return cvar_map.astype(cp.float32)

@@ -1,0 +1,20 @@
+# Score q=tau*support is high when traversable. CVaR cost is 1-lower_tail(q).
+min_filter:
+  enable: True
+  type: min_filter
+  fill_nan: False
+  is_height_layer: True
+  layer_name: min_filter
+  extra_params: {dilation_size: 1, iteration_n: 10}
+cvar_layer:
+  enable: True
+  type: cvar_layer
+  fill_nan: False
+  is_height_layer: False
+  layer_name: similarity_cvar
+  extra_params:
+    mean_layer_name: similarity
+    variance_layer_name: similarity_var
+    count_layer_name: similarity_count
+    clip_output: True
+    # cvar_alpha is inherited from the mapping node parameter.

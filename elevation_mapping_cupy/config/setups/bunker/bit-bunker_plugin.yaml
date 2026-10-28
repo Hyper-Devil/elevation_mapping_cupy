@@ -57,6 +57,7 @@ cvar_layer:
   is_height_layer: False
   layer_name: "similarity_cvar"
   extra_params:
-    cvar_alpha: 0.2 # Lower alpha means more risk-averse, Higher alpha means more risk-seeking.
+    cvar_alpha: 0.2 # Larger alpha increases the risk penalty.
     mean_layer_name: "similarity"
     variance_layer_name: "similarity_var"
+    count_layer_name: "similarity_count"

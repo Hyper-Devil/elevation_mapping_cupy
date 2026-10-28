@@ -69,6 +69,9 @@ target_link_libraries(elevation_mapping_node elevation_mapping_ros)
 
 catkin_python_setup()
 
+catkin_install_python(PROGRAMS script/generate_risk_costmap.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+
 install(
   TARGETS elevation_mapping_ros elevation_mapping_node
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}

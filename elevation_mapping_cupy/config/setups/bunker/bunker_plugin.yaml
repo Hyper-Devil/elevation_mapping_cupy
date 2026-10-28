@@ -59,3 +59,4 @@ cvar_layer:
     cvar_alpha: 0.1
     mean_layer_name: "similarity"
     variance_layer_name: "similarity_var"
+    count_layer_name: "similarity_count"

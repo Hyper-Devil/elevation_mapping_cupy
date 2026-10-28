@@ -150,6 +150,7 @@ class Parameter(Serializable):
             "image_color",
             "image_exponential",
             "image_exponential_variance",
+            "image_ema_variance",
             "pointcloud_average",
             "pointcloud_bayesian_inference",
             "pointcloud_class_average",
@@ -163,6 +164,10 @@ class Parameter(Serializable):
     data_type: str = np.float32  # data type for the map
     average_weight: float = 0.5  # weight for the average fusion
     cvar_alpha: float = 0.9  # confidence level alpha used in CVaR-related plugins
+    image_ema_gamma: float = 0.2  # paper EMA gain; independent of CVaR alpha
+    semantic_global_map_length: float = 200.0
+    semantic_global_origin_x: float = -100.0
+    semantic_global_origin_y: float = -100.0
 
     map_length: float = 8.0  # map's size in m.
     sensor_noise_factor: float = 0.05  # point's noise is sensor_noise_factor*z^2 (z is distance from sensor).

@@ -576,6 +576,7 @@ class ElevationMap:
                 self.valid_correspondence,
                 image_height,
                 image_width,
+                map_center=self.center,
             )
 
     def update_normal(self, dilated_map):

@@ -47,6 +47,9 @@ class SemanticMap:
     def clear(self):
         """Clear the semantic map."""
         self.semantic_map *= 0.0
+        for plugin in self.fusion_manager.plugins:
+            if hasattr(plugin, 'clear'):
+                plugin.clear()
 
     def initialize_fusion(self):
         """Initialize the fusion algorithms."""
@@ -268,6 +271,7 @@ class SemanticMap:
         valid_correspondence: cp._core.core.ndarray,
         image_height: cp._core.core.ndarray,
         image_width: cp._core.core.ndarray,
+        map_center=None,
     ):
         """Update the semantic map with the new image.
 
@@ -309,7 +313,7 @@ class SemanticMap:
             sem_map_var_idx = None
             sem_map_aux_idxs = None
 
-            if fusion == "exponential_variance":
+            if fusion in ("exponential_variance", "ema_variance"):
                 var_channel = f"{channel}_var"
                 if var_channel not in self.layer_names:
                     print(f"Layer {var_channel} not found, adding it to the semantic map")
@@ -336,6 +340,9 @@ class SemanticMap:
             #           f"high_prob={non_zero}/{total_px} ({100*non_zero/total_px:.2f}%)")
 
             # update the layers with the fusion algorithm
+            if fusion == 'ema_variance':
+                idx = self.fusion_manager.get_plugin_idx(fusion, 'image')
+                self.fusion_manager.plugins[idx].set_map_center(map_center)
             self.fusion_manager.execute_image_plugin(
                 fusion,
                 cp.uint64(sem_map_idx),

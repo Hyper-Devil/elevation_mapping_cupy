@@ -2,7 +2,7 @@
 
 这些脚本是工作区激活、编译和验收的唯一维护入口。源码须位于
 `WORKSPACE/src/elevation_mapping_cupy`；容器统一将 WORKSPACE 挂载为
-`/home/root/catkin_emcp`。不修改现有容器、不覆盖已有测试输出。
+`/home/root/catkin_emcp`。优先复用匹配的现有容器，不覆盖已有测试输出。
 
 ## 使用已验收的镜像
 
@@ -10,8 +10,23 @@
 [environment.json](environment.json)。该镜像是本机制作的快照，没有声明已经发布到
 公共镜像仓库；换机器时须先通过 `docker save` / `docker load` 搬运，或按下节重建。
 `create_container.sh` 校验 image ID，不会将同名但不同内容的镜像默认为已验证环境。
+已有容器的 image ID、工作区挂载和 GPU 配置匹配时直接复用；已停止时启动它，
+不再要求另开容器。配置不匹配时报告错误，由调用者检查。
 
-在新的工作区 clone 本仓库后：
+本机日常编译、插件测试和 RELLIS GPU 制集统一使用 `emcupy`。2026-10-28
+已将原 `rellis-emcupy-20261027` 改名为 `emcupy`，保留其 `/work`、`/builder`、
+`/dataset` 和 `/home/root/catkin_emcp` 挂载；删除了仅挂载工作区的重复容器。
+SLAM/物理响应继续使用 `rellis-builder-20261027`，因为当前 GPU 镜像缺少其
+GeographicLib/GTSAM 动态库。容器清理不删除镜像、宿主工作区或验证记录。
+
+日常使用：
+
+```bash
+bash tools/rellis_runtime/create_container.sh /mnt/nvme1n1/whd/emcp
+bash tools/rellis_runtime/enter_container.sh
+```
+
+只有确实需要不同工作区或镜像进行独立验证时，才显式指定其他容器名：
 
 ```bash
 EMCP_CONTAINER=emcupy-repro bash tools/rellis_runtime/create_container.sh /path/to/new/workspace

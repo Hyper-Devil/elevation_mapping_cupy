@@ -1,0 +1,61 @@
+<launch>
+  <arg name="map_frame" default="map"/>
+  <arg name="base_frame" default="base_link"/>
+  <arg name="pointcloud_topic" default="/cloud_registered"/>
+  <arg name="reference_speed"/>
+  <arg name="cvar_alpha" default="0.9"/>
+  <arg name="ema_gamma" default="0.2"/>
+  <arg name="resolution" default="0.1"/>
+  <arg name="map_length" default="200.0"/>
+  <arg name="origin_x" default="-100.0"/>
+  <arg name="origin_y" default="-100.0"/>
+  <arg name="save_path" default=""/>
+  <node pkg="elevation_mapping_cupy" type="elevation_mapping_node" name="navigation_elevation" output="screen" required="true">
+    <rosparam command="load" file="$(find elevation_mapping_cupy)/config/setups/bunker/bunker_parameters.yaml"/>
+    <param name="plugin_config_file" value="$(find elevation_mapping_cupy)/config/setups/bunker/navigation_plugin.yaml"/>
+    <param name="map_frame" value="$(arg map_frame)"/>
+    <param name="base_frame" value="$(arg base_frame)"/>
+    <param name="corrected_map_frame" value="$(arg map_frame)"/>
+    <param name="resolution" value="$(arg resolution)"/>
+    <param name="image_ema_gamma" value="$(arg ema_gamma)"/>
+    <param name="cvar_alpha" value="$(arg cvar_alpha)"/>
+    <param name="semantic_global_map_length" value="$(arg map_length)"/>
+    <param name="semantic_global_origin_x" value="$(arg origin_x)"/>
+    <param name="semantic_global_origin_y" value="$(arg origin_y)"/>
+    <param name="enable_drift_compensation" value="false"/>
+    <param name="use_initializer_at_start" value="false"/>
+    <rosparam>
+      pointcloud_channel_fusions: {default: average}
+      image_channel_fusions: {similarity: ema_variance, default: exponential}
+      publishers:
+        filtered_elevation_map:
+          layers: [elevation, min_filter, similarity, similarity_var, similarity_count, similarity_cvar]
+          basic_layers: [elevation]
+          fps: 3.0
+    </rosparam>
+    <rosparam subst_value="true">
+      subscribers:
+        lidar:
+          topic_name: $(arg pointcloud_topic)
+          data_type: pointcloud
+        score:
+          topic_name: /uam2te/conservative_score
+          camera_info_topic_name: /uam2te/prediction_camera_info
+          channel_info_topic_name: /uam2te/channel_info
+          channels: [similarity]
+          data_type: image
+    </rosparam>
+  </node>
+  <node pkg="elevation_mapping_cupy" type="generate_risk_costmap.py" name="navigation_risk_costmap" output="screen" required="true">
+    <param name="grid_topic" value="/navigation_elevation/filtered_elevation_map"/>
+    <param name="map_frame" value="$(arg map_frame)"/>
+    <param name="resolution" value="$(arg resolution)"/>
+    <param name="map_length" value="$(arg map_length)"/>
+    <param name="origin_x" value="$(arg origin_x)"/>
+    <param name="origin_y" value="$(arg origin_y)"/>
+    <param name="cvar_alpha" value="$(arg cvar_alpha)"/>
+    <param name="ema_gamma" value="$(arg ema_gamma)"/>
+    <param name="reference_speed" value="$(arg reference_speed)"/>
+    <param name="save_path" value="$(arg save_path)"/>
+  </node>
+</launch>
