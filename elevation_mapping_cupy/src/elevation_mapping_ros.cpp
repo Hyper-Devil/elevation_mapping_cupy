@@ -4,6 +4,7 @@
 //
 
 #include "elevation_mapping_cupy/elevation_mapping_ros.hpp"
+#include "elevation_mapping_cupy/runtime_timing.hpp"
 
 // Pybind
 #include <pybind11/eigen.h>
@@ -301,6 +302,7 @@ namespace elevation_mapping_cupy
 
   void ElevationMappingNode::publishMapOfIndex(int index)
   {
+    RuntimeTimingScope profile("mapping.grid_publish");
     // publish the map layers of index
     if (!isGridmapUpdated_)
     {
@@ -361,6 +363,7 @@ namespace elevation_mapping_cupy
   void ElevationMappingNode::inputPointCloud(const sensor_msgs::PointCloud2 &cloud,
                                              const std::vector<std::string> &channels)
   {
+    RuntimeTimingScope profile("mapping.cloud_callback", cloud.header.stamp.toNSec());
     auto start = ros::Time::now();
     auto *pcl_pc = new pcl::PCLPointCloud2;
     pcl::PCLPointCloud2ConstPtr cloudPtr(pcl_pc);
@@ -382,6 +385,7 @@ namespace elevation_mapping_cupy
         points(i, j) = static_cast<double>(temp);
       }
     }
+    profile.mark("mapping.cloud_decode");
     //  get pose of sensor in map frame
     tf::StampedTransform transformTf;
     std::string sensorFrameId = cloud.header.frame_id;
@@ -399,6 +403,7 @@ namespace elevation_mapping_cupy
       return;
     }
 
+    profile.mark("mapping.cloud_tf_wait");
     double positionError{0.0};
     double orientationError{0.0};
     {
@@ -408,6 +413,7 @@ namespace elevation_mapping_cupy
     }
     map_.input(points, channels, transformationSensorToMap.rotation(), transformationSensorToMap.translation(), positionError,
                orientationError);
+    profile.mark("mapping.cloud_python_call");
 
     if (enableDriftCorrectedTFPublishing_)
     {
@@ -424,6 +430,7 @@ namespace elevation_mapping_cupy
                                         const sensor_msgs::CameraInfoConstPtr &camera_info_msg,
                                         const std::vector<std::string> &channels)
   {
+    RuntimeTimingScope profile("mapping.image_callback", image_msg->header.stamp.toNSec());
     // Get image
     cv::Mat image = cv_bridge::toCvShare(image_msg, image_msg->encoding)->image;
 
@@ -456,6 +463,7 @@ namespace elevation_mapping_cupy
     // distortion model
     std::string distortion_model = camera_info_msg->distortion_model;
 
+    profile.mark("mapping.image_decode");
     // Get pose of sensor in map frame
     tf::StampedTransform transformTf;
     std::string sensorFrameId = image_msg->header.frame_id;
@@ -473,6 +481,7 @@ namespace elevation_mapping_cupy
       return;
     }
 
+    profile.mark("mapping.image_tf_wait");
     // Transform image to vector of Eigen matrices for easy pybind conversion
     std::vector<cv::Mat> image_split;
     std::vector<ColMatrixXf> multichannel_image;
@@ -527,9 +536,11 @@ namespace elevation_mapping_cupy
       return;
     }
 
+    profile.mark("mapping.image_eigen_conversion");
     // Pass image to pipeline
     map_.input_image(multichannel_image, channels, transformationMapToSensor.rotation(), transformationMapToSensor.translation(), cameraMatrix,
                      distortionCoeffs, distortion_model, image.rows, image.cols);
+    profile.mark("mapping.image_python_call");
   }
 
   void ElevationMappingNode::imageCallback(const sensor_msgs::ImageConstPtr &image_msg,
@@ -817,6 +828,7 @@ namespace elevation_mapping_cupy
 
   void ElevationMappingNode::updateGridMap(const ros::TimerEvent &)
   {
+    RuntimeTimingScope profile("mapping.grid_acquire");
     std::vector<std::string> layers(map_layers_all_.begin(), map_layers_all_.end());
     std::lock_guard<std::mutex> lock(mapMutex_);
     map_.get_grid_map(gridMap_, layers);
