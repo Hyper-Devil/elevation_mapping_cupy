@@ -493,6 +493,10 @@ class ElevationMap:
             None:
         """
 
+        # R,t come from the image-header-time TF lookup in inputImage (C++).
+        # Keep the original double precision pose for controlled range replays.
+        image_pose = (np.asarray(R, dtype=np.float64).copy(),
+                      np.asarray(t, dtype=np.float64).copy()) if self.param.image_ema_trace_dir else None
         image = np.stack(image, axis=0)
         if len(image.shape) == 2:
             image = image[None]
@@ -577,6 +581,7 @@ class ElevationMap:
                 image_height,
                 image_width,
                 map_center=self.center,
+                image_pose=image_pose,
             )
 
     def update_normal(self, dilated_map):

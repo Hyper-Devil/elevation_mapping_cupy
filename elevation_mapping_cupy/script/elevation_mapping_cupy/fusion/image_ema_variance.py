@@ -1,5 +1,8 @@
 """Paper EMA at world cells; retain statistics when the terrain window moves."""
 import math
+import json
+from pathlib import Path
+import numpy as np
 import cupy as cp
 from .fusion_manager import FusionBase
 from elevation_mapping_cupy.risk_mapping import ema_update
@@ -20,12 +23,27 @@ class ImageEMAVariance(FusionBase):
         self.origin_y = float(params.semantic_global_origin_y)
         self.states = {}
         self.center = None
+        self.image_pose = None
+        self.trace_dir=Path(params.image_ema_trace_dir) if params.image_ema_trace_dir else None
+        self.trace_index=0
+        self.generation=0
+        if self.trace_dir:
+            self.trace_dir.mkdir(parents=True,exist_ok=True)
+            if any(self.trace_dir.iterdir()):raise ValueError('EMA trace directory must be empty')
+            (self.trace_dir/'metadata.json').write_text(json.dumps(dict(schema='world_ema_trace_v1',
+                size=self.size,resolution=self.resolution,origin=[self.origin_x,self.origin_y],
+                baseline_gamma=self.gamma,state_axes='channel,x,y'),indent=2)+'\n')
 
     def set_map_center(self, center):
         self.center = cp.asarray(center)
 
+    def set_image_pose(self, pose):
+        """Map-to-camera transform evaluated at the image acquisition stamp."""
+        self.image_pose = pose
+
     def clear(self):
         self.states.clear()
+        self.generation+=1
 
     def __call__(self, sem_map_idx, image, j, uv_correspondence, valid_correspondence,
                  image_height, image_width, semantic_map, new_map, sem_map_var_idx,
@@ -56,6 +74,24 @@ class ImageEMAVariance(FusionBase):
         m, var, count = ema_update(local[0, x, y], local[1, x, y], local[2, x, y], sample[x, y], self.gamma)
         local[0, x, y], local[1, x, y], local[2, x, y] = m, var, count
         state[:, gx[x], gy[y]] = local[:, x, y]
+        if self.trace_dir:
+            # Record actual projected observations, not periodic GridMap copies.
+            # Baseline posterior values let offline replay check every update.
+            geometry = {}
+            if image.shape[0] > 1:
+                cx, cy = cp.nonzero(inside & valid_correspondence)
+                geometry = dict(candidate_x=cp.asnumpy(gx[cx]).astype(np.int32),
+                                candidate_y=cp.asnumpy(gy[cy]).astype(np.int32),
+                                candidate_u=cp.asnumpy(u[cx,cy]).astype(np.int32),
+                                candidate_v=cp.asnumpy(v[cx,cy]).astype(np.int32))
+            np.savez_compressed(self.trace_dir/('frame_%06d.npz'%self.trace_index),
+                x=cp.asnumpy(gx[x]).astype(np.int32),y=cp.asnumpy(gy[y]).astype(np.int32),
+                observation=cp.asnumpy(sample[x,y]),posterior=cp.asnumpy(cp.stack((m,var,count))),
+                channel=key,generation=self.generation,image_channel=j,
+                **({} if self.image_pose is None else dict(
+                    map_to_camera_rotation=self.image_pose[0],
+                    map_to_camera_translation=self.image_pose[1])), **geometry)
+            self.trace_index+=1
         for target, value in zip((key, int(sem_map_var_idx), int(sem_map_aux_idxs[0])), local):
             semantic_map[target] = value
             new_map[target] = value

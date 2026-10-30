@@ -272,6 +272,7 @@ class SemanticMap:
         image_height: cp._core.core.ndarray,
         image_width: cp._core.core.ndarray,
         map_center=None,
+        image_pose=None,
     ):
         """Update the semantic map with the new image.
 
@@ -343,6 +344,7 @@ class SemanticMap:
             if fusion == 'ema_variance':
                 idx = self.fusion_manager.get_plugin_idx(fusion, 'image')
                 self.fusion_manager.plugins[idx].set_map_center(map_center)
+                self.fusion_manager.plugins[idx].set_image_pose(image_pose)
             self.fusion_manager.execute_image_plugin(
                 fusion,
                 cp.uint64(sem_map_idx),

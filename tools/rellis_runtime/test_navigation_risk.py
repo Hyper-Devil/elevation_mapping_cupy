@@ -17,10 +17,10 @@ def test_paper_variance_uses_updated_mean():
     np.testing.assert_allclose([m[0], v[0], n[0]], [.5, .045, 2])
 
 
-def test_world_ema_survives_window_shift_and_ignores_nan():
+def test_world_ema_survives_window_shift_and_ignores_nan(tmp_path):
     p = Parameter(resolution=1., map_length=4., image_ema_gamma=.5,
                   semantic_global_map_length=20., semantic_global_origin_x=-10., semantic_global_origin_y=-10.,
-                  image_channel_fusions={'similarity': 'ema_variance'})
+                  image_channel_fusions={'similarity': 'ema_variance'},image_ema_trace_dir=str(tmp_path))
     p.update()
     mapping = SemanticMap(p)
     mapping.initialize_fusion()
@@ -40,6 +40,14 @@ def test_world_ema_survives_window_shift_and_ignores_nan():
     mapping.clear()
     observe(.7, [0, 0, 0])
     np.testing.assert_allclose(cp.asnumpy(mapping.semantic_map[at]), [.7, 0, 1], atol=1e-6)
+    files=sorted(tmp_path.glob('frame_*.npz'))
+    assert len(files)==5
+    with np.load(files[2]) as trace:
+        np.testing.assert_allclose(trace['observation'],[.8])
+        np.testing.assert_allclose(trace['posterior'][:,0],[.5,.045,2],atol=1e-6)
+        assert trace['generation']==0
+    with np.load(files[3]) as trace:assert len(trace['observation'])==0
+    with np.load(files[4]) as trace:assert trace['generation']==1
 
 
 def test_cvar_masks_unknown_preserves_high_cost_and_alpha_zero():
@@ -79,6 +87,8 @@ def test_global_export_recomputes_alpha_and_overwrites_free_with_high_risk(monke
     node.frame, node.resolution, node.size = 'map', .1, 2
     node.origin_x = node.origin_y = 0
     node.alpha = 0
+    node.cost_encoding = 'continuous'
+    node.cost_thresholds = (.3,.5,.7,.9)
     node.state = np.zeros((3, 2, 2), dtype=np.float32)
     node.state[:, 0, 0] = [1., .04, 1]
     output = []
@@ -95,3 +105,23 @@ def test_global_export_recomputes_alpha_and_overwrites_free_with_high_risk(monke
     assert output[-1].data == [100, -1, -1, -1]
     # Re-publishing statistics is not an additional observation.
     assert node.state[2, 0, 0] == 1
+    node.cost_encoding = 'five_level'
+    node.state[:, 0, 0] = [.8, 0., 1]
+    node.publish(rospy.Time(4))
+    assert output[-1].data == [30, -1, -1, -1]
+    node.cost_thresholds = (.2,.35,.5,.65)
+    node.publish(rospy.Time(5))
+    assert output[-1].data == [0, -1, -1, -1]
+
+
+def test_five_level_cost_thresholds_and_unknowns():
+    values = np.array([-.1, 0., .299, .3, .499, .5, .699, .7, .899, .9, 1., 1.1,
+                       np.nan, np.inf, -np.inf], dtype=np.float32)
+    np.testing.assert_array_equal(score_to_cost(values, 'five_level'),
+                                  [100, 100, 100, 70, 70, 50, 50, 30, 30, 0, 0, 0, -1, -1, -1])
+    np.testing.assert_array_equal(score_to_cost(np.array([0., .25, 1., np.nan])), [100, 75, 0, -1])
+    with pytest.raises(ValueError): score_to_cost(values, 'unknown_encoding')
+    np.testing.assert_array_equal(score_to_cost(np.array([.1,.2,.35,.5,.65,.8,np.nan],dtype=np.float32),
+                                  'five_level',(.2,.35,.5,.65)), [100,70,50,30,0,0,-1])
+    for invalid in [(.2,.3,.4),(.2,.1,.5,.9),(.2,.2,.5,.9),(.2,.3,.5,np.nan),(-.1,.3,.5,.9)]:
+        with pytest.raises(ValueError):score_to_cost(values,'five_level',invalid)

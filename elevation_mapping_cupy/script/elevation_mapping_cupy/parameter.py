@@ -165,6 +165,7 @@ class Parameter(Serializable):
     average_weight: float = 0.5  # weight for the average fusion
     cvar_alpha: float = 0.9  # confidence level alpha used in CVaR-related plugins
     image_ema_gamma: float = 0.2  # paper EMA gain; independent of CVaR alpha
+    image_ema_trace_dir: str = ""  # optional ordered world-cell observations for controlled replay
     semantic_global_map_length: float = 200.0
     semantic_global_origin_x: float = -100.0
     semantic_global_origin_y: float = -100.0

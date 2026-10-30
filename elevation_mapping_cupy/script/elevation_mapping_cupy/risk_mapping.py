@@ -47,9 +47,25 @@ def decode_grid_layer(msg, layer):
     return np.roll(values, (-msg.inner_start_index, -msg.outer_start_index), axis=(0, 1))
 
 
-def score_to_cost(score):
+def validate_cost_thresholds(thresholds):
+    values=np.asarray(thresholds,dtype=np.float64)
+    if (values.shape != (4,) or not np.isfinite(values).all() or
+            values[0] < 0 or values[-1] > 1 or not (np.diff(values)>0).all()):
+        raise ValueError('cost_thresholds must contain four increasing finite values in [0,1]')
+    return tuple(float(value) for value in values)
+
+
+def score_to_cost(score, encoding='continuous', thresholds=(.3,.5,.7,.9)):
     """Finite zero/negative scores are high risk, never unknown."""
+    if encoding not in ('continuous', 'five_level'):
+        raise ValueError('cost_encoding must be continuous or five_level')
     result = np.full(score.shape, -1, dtype=np.int8)
     valid = np.isfinite(score)
-    result[valid] = np.rint(100*(1-np.clip(score[valid], 0, 1))).astype(np.int8)
+    if encoding == 'five_level':
+        thresholds=validate_cost_thresholds(thresholds)
+        values = score[valid]
+        result[valid] = np.select([values < threshold for threshold in thresholds],
+                                  [100, 70, 50, 30], default=0).astype(np.int8)
+    else:
+        result[valid] = np.rint(100*(1-np.clip(score[valid], 0, 1))).astype(np.int8)
     return result

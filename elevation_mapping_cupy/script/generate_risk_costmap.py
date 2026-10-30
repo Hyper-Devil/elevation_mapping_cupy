@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Export paper EMA/CVaR statistics to a persistent, continuous global costmap."""
+"""Export paper EMA/CVaR statistics to a persistent global costmap."""
 import os
 import json
 import threading
@@ -10,7 +10,7 @@ from grid_map_msgs.msg import GridMap
 from nav_msgs.msg import OccupancyGrid
 from std_srvs.srv import Trigger, TriggerResponse
 from std_msgs.msg import String
-from elevation_mapping_cupy.risk_mapping import cvar_coefficient, decode_grid_layer, score_to_cost
+from elevation_mapping_cupy.risk_mapping import cvar_coefficient, decode_grid_layer, score_to_cost, validate_cost_thresholds
 
 
 class RiskCostmap:
@@ -27,6 +27,10 @@ class RiskCostmap:
         self.coefficient = cvar_coefficient(self.alpha)
         self.gamma = float(rospy.get_param('~ema_gamma', 0.2))
         self.reference_speed = float(rospy.get_param('~reference_speed'))
+        self.cost_encoding = rospy.get_param('~cost_encoding', 'continuous')
+        if self.cost_encoding not in ('continuous', 'five_level'):
+            raise ValueError('cost_encoding must be continuous or five_level')
+        self.cost_thresholds=validate_cost_thresholds(rospy.get_param('~cost_thresholds',[.3,.5,.7,.9]))
         self.save_path = rospy.get_param('~save_path', '')
         self.lock = threading.RLock()
         self.metadata = None
@@ -87,7 +91,7 @@ class RiskCostmap:
         mean, variance, count = self.state
         conservative = mean-coefficient*np.sqrt(np.maximum(variance, 0))
         conservative = np.where(count > 0, conservative, np.nan)
-        result = score_to_cost(conservative)
+        result = score_to_cost(conservative, self.cost_encoding, self.cost_thresholds)
         msg = OccupancyGrid()
         msg.header.frame_id, msg.header.stamp = self.frame, stamp
         msg.info.resolution = self.resolution
@@ -109,7 +113,10 @@ class RiskCostmap:
                                     valid=self.state[2] > 0, resolution=self.resolution,
                                     origin=[self.origin_x, self.origin_y], map_frame=self.frame,
                                     cvar_alpha=self.alpha, ema_gamma=self.gamma,
+                                    cost_encoding=self.cost_encoding,
+                                    cost_thresholds=self.cost_thresholds,
                                     reference_speed=self.reference_speed,
+                                    support_min=float((self.metadata or {}).get('mapping_support_min', 0.)),
                                     prediction_metadata=json.dumps(self.metadata, sort_keys=True),
                                     schema='paper_ema_cvar_v1')
             os.replace(path+'.tmp', path)
